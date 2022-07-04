@@ -586,10 +586,15 @@ class Executor(val classManager: ClassManager) {
     ctor
   }
 
-  def attachExportedMembers(dynamic: js.Dynamic, linkedClass: LinkedClass)(implicit env: Env) =
+  def attachExportedMembers(dynamic: js.Dynamic, linkedClass: LinkedClass)(implicit env: Env): Unit =
     linkedClass.exportedMembers.map(_.value).foreach {
-      // Constructor will leak into prototype here,
-      // but it shouldn't matter too much
+      case JSMethodDef(flags, StringLiteral("constructor"), _, _)
+          if flags.namespace == MemberNamespace.Public && linkedClass.kind.isJSClass =>
+        /* Don't reassign the `constructor`. This is already done by virtue of
+         * how we create the `class`.
+         */
+        ()
+
       case JSMethodDef(flags, name, args, body) =>
         val methodName = eval(name).asInstanceOf[String]
         val methodBody = evalJsFunction(args, body)
