@@ -2,7 +2,7 @@ package org.scalajs.sjsirinterpreter.browser
 
 import scala.scalajs.js
 import js.annotation._
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 import org.scalajs.linker.interface.ModuleInitializer
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Trees._
@@ -18,8 +18,11 @@ class Interpreter(
   val irPath: String,
   val mainClass: String,
   val mainMethod: String = "main",
-  val stdPath: String = "scalajs-library_2.13-1.4.0.jar"
+  val stdPath: String = "scalajs-library_2.13-1.10.1.jar"
 ) extends js.Object {
+  @scala.annotation.nowarn
+  private implicit val ec: ExecutionContext = ExecutionContext.global
+
   val reader = new BrowserReader(stdPath, irPath)
 
   def run() = {

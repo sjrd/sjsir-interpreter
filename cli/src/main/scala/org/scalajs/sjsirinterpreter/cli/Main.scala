@@ -1,6 +1,6 @@
 package org.scalajs.sjsirinterpreter.cli
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.ExecutionContext
 
 import scala.scalajs.js
 
@@ -14,9 +14,12 @@ import org.scalajs.linker.interface.ModuleInitializer
 import org.scalajs.sjsirinterpreter.core._
 
 object Main {
+  @scala.annotation.nowarn
+  private implicit val ec: ExecutionContext = ExecutionContext.global
+
   def main(args: Array[String]): Unit = {
     val irReader = new CliReader(
-      "std/scalajs-library_2.13-1.4.0.jar",
+      "std/scalajs-library_2.13-1.10.1.jar",
       "sample/target/scala-2.13/classes"
     )
 

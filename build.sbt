@@ -13,7 +13,7 @@ lazy val `sjsir-interpreter` = project
   .enablePlugins(ScalaJSPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.4.0",
+      "org.scala-js" %%% "scalajs-linker" % "1.10.1",
       "com.lihaoyi" %%% "utest" % "0.7.5" % "test",
     ),
     testFrameworks += new TestFramework("utest.runner.Framework"),
@@ -28,9 +28,6 @@ lazy val `sjsir-interpreter-cli` = project
   .in(file("cli"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
-    libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.4.0"
-    ),
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
@@ -53,7 +50,6 @@ lazy val `sjsir-interpreter-browser` = project
   .enablePlugins(ScalaJSPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.4.0",
       "org.scala-js" %%% "scalajs-dom" % "1.1.0"
     ),
     scalaJSUseMainModuleInitializer := false,

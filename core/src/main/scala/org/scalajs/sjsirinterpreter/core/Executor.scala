@@ -190,20 +190,25 @@ class Executor(val classManager: ClassManager) {
       }
 
     case Match(selector, cases, default) =>
-      val alt = Types.asInt(eval(selector))
+      val scrutinee: MatchableLiteral = (eval(selector): Any) match {
+        case x: Int    => IntLiteral(x)
+        case x: String => StringLiteral(x)
+        case null      => Null()
+        case _         => throw new Error("Interpreter Error: Not a Matchable value")
+      }
       val exp = cases.find {
-        case (alts, _) => alts.contains(IntLiteral(alt))
+        case (alts, _) => alts.contains(scrutinee)
       }.map(_._2).getOrElse(default)
       eval(exp)
 
     case Debugger() =>
       throw new AssertionError("Trying to debug undebuggable? :)")
 
-    case Closure(true, captureParams, params, body, captureValues) =>
-      evalJsClosure(params, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
+    case Closure(true, captureParams, params, restParam, body, captureValues) =>
+      evalJsClosure(params, restParam, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
 
-    case Closure(false, captureParams, params, body, captureValues) =>
-      evalJsFunction(params, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
+    case Closure(false, captureParams, params, restParam, body, captureValues) =>
+      evalJsFunction(params, restParam, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
 
     case JSObjectConstr(props) =>
       val inits = props.map {
@@ -305,21 +310,23 @@ class Executor(val classManager: ClassManager) {
     args.map(_.name.name).zip(values map eval).toMap
   }
 
-  def bindJSArgs(params: List[ParamDef], values: Seq[js.Any]): Map[LocalName, js.Any] = {
+  def bindJSArgs(params: List[ParamDef], restParam: Option[ParamDef], values: Seq[js.Any]): Map[LocalName, js.Any] = {
     def expandWithUndefined(n: Int, values: Seq[js.Any]): Seq[js.Any] =
       if (values.sizeIs >= n) values
       else values ++ List.fill(n - values.size)(js.undefined)
 
-    val adaptedValues: Seq[js.Any] = params match {
-      case initParams :+ restParam if restParam.rest =>
-        val (fixedValues, restValues) = values.splitAt(initParams.size)
-        expandWithUndefined(initParams.size, fixedValues) :+ js.Array(restValues: _*)
-      case _ =>
-        expandWithUndefined(params.size, values)
-    }
-    assert(adaptedValues.sizeCompare(params) == 0, s"$params <-> $adaptedValues")
+    val (fixedValues0, restValues) = values.splitAt(params.size)
+    val fixedValues = expandWithUndefined(params.size, fixedValues0)
 
-    params.map(_.name.name).zip(adaptedValues).toMap
+    assert(fixedValues.sizeCompare(params) == 0, s"$params <-> $fixedValues")
+    val fixedMap = params.map(_.name.name).zip(fixedValues).toMap
+
+    restParam match {
+      case Some(rest) =>
+        fixedMap.updated(rest.name.name, js.Array(restValues: _*))
+      case None =>
+        fixedMap
+    }
   }
 
   /**
@@ -343,7 +350,7 @@ class Executor(val classManager: ClassManager) {
     (result, env)
   }
 
-  def evalAssign(selector: Tree, value: js.Any)(implicit env: Env): js.Any = selector match {
+  def evalAssign(selector: AssignLhs, value: js.Any)(implicit env: Env): js.Any = selector match {
     case VarRef(LocalIdent(name)) =>
       env.set(name, value)
 
@@ -382,18 +389,18 @@ class Executor(val classManager: ClassManager) {
       throw new AssertionError(s"Selector expected in lhs of Assign, given: $nonSelect")
   }
 
-  def evalJsFunction(params: List[ParamDef], body: Tree)(implicit env: Env): js.Any = {
+  def evalJsFunction(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
     val call: js.Function2[js.Any, js.Array[js.Any], js.Any] = { (thizz, args) =>
-      val argsMap = bindJSArgs(params, args.toSeq)
+      val argsMap = bindJSArgs(params, restParam, args.toSeq)
       eval(body)(env.bind(argsMap).setThis(thizz))
     }
     new js.Function("body", "return function(...args) { return body(this, args); };")
       .asInstanceOf[js.Function1[js.Function, js.Any]].apply(call)
   }
 
-  def evalJsClosure(params: List[ParamDef], body: Tree)(implicit env: Env): js.Any = {
+  def evalJsClosure(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
     val call: js.Function1[js.Array[js.Any], js.Any] = { (args) =>
-      val argsMap = bindJSArgs(params, args.toSeq)
+      val argsMap = bindJSArgs(params, restParam, args.toSeq)
       eval(body)(env.bind(argsMap))
     }
     new js.Function("body", "return (...args) => { return body(args); };")
@@ -552,7 +559,7 @@ class Executor(val classManager: ClassManager) {
     )
 
     val ctorDef = linkedClass.exportedMembers.map(_.value).find {
-      case JSMethodDef(_, StringLiteral("constructor"), _, _) => true
+      case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
       case _ => false
     }.getOrThrow(s"Cannot find constructor in ${linkedClass.className} exportedMembers").asInstanceOf[JSMethodDef]
 
@@ -565,7 +572,7 @@ class Executor(val classManager: ClassManager) {
     val parents = js.Dynamic.literal(ParentClass = superClass).asInstanceOf[RawParents]
 
     def preSuperStatements(args: Seq[js.Any]): Env = {
-      val argsMap = bindJSArgs(ctorDef.args, args)
+      val argsMap = bindJSArgs(ctorDef.args, ctorDef.restParam, args)
       evalStmts(preludeTree)(env.bind(argsMap))._2
     }
 
@@ -588,16 +595,16 @@ class Executor(val classManager: ClassManager) {
 
   def attachExportedMembers(dynamic: js.Dynamic, linkedClass: LinkedClass)(implicit env: Env): Unit =
     linkedClass.exportedMembers.map(_.value).foreach {
-      case JSMethodDef(flags, StringLiteral("constructor"), _, _)
+      case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
           if flags.namespace == MemberNamespace.Public && linkedClass.kind.isJSClass =>
         /* Don't reassign the `constructor`. This is already done by virtue of
          * how we create the `class`.
          */
         ()
 
-      case JSMethodDef(flags, name, args, body) =>
+      case JSMethodDef(flags, name, args, restParam, body) =>
         val methodName = eval(name).asInstanceOf[String]
-        val methodBody = evalJsFunction(args, body)
+        val methodBody = evalJsFunction(args, restParam, body)
         dynamic.updateDynamic(methodName)(methodBody)
 
       case descriptor @ JSPropertyDef(_, name, _, _) =>

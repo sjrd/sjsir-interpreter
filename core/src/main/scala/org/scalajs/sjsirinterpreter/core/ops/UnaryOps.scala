@@ -24,5 +24,6 @@ object UnaryOps {
     case DoubleToFloat => asDouble(t).toFloat
     case LongToDouble => asLong(t).value.toDouble
     case DoubleToLong => new LongInstance(asDouble(t).toLong)
+    case LongToFloat => asLong(t).value.toFloat
   }
 }

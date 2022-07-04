@@ -144,9 +144,7 @@ object TypesTests extends TestSuite{
         ShortType -> false,
         IntType -> false,
         LongType -> false,
-        // https://www.scala-js.org/doc/semantics.html
-        // "Floats can behave as Doubles by default"
-        FloatType -> true,
+        FloatType -> false,
         DoubleType -> true,
         BooleanType -> false
       ))

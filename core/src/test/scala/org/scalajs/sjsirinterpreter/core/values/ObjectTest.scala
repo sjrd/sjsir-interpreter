@@ -44,7 +44,7 @@ object ObjectTests extends TestSuite{
         StringLiteral("y"),
         Some(JSUnaryOp(JSUnaryOp.-, selector)),
         Some((
-          ParamDef(LocalIdent(LocalName("value")), OriginalName.NoOriginalName, AnyType, false, false),
+          ParamDef(LocalIdent(LocalName("value")), OriginalName.NoOriginalName, AnyType, false),
           Assign(selector, VarRef(LocalIdent(LocalName("value")))(AnyType))
         ))
       ))

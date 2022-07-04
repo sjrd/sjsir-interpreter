@@ -13,10 +13,14 @@ package sample
 import scala.scalajs.js
 import js.annotation._
 
+@js.native
 trait Parents extends js.Object {
+  @js.native
   class ParentClass(args: js.Any*) extends js.Object
 }
+
 class Env(val locals: Map[String, js.Any])
+
 object HelloWorld {
   def extendDynamic(superClass: js.Dynamic): js.Dynamic = {
     val parents =
