@@ -34,7 +34,17 @@ lazy val tint_cli = project
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
-    }
+    },
+    Compile / fastLinkJS / copyResources := {
+      val cp = Attributed.data((Compile / dependencyClasspath).value)
+      val stdlib = cp.find(_.getName.startsWith("scalajs-library")).getOrElse {
+        throw new MessageOnlyException(s"Cannot find the scalajs-library in $cp")
+      }
+      IO.copy(Seq((stdlib, (LocalRootProject / baseDirectory).value / "std" / stdlib.getName)))
+      val sampleCompile = (sample / Compile / compile).value
+      Nil
+    },
+    Compile / fastLinkJS := (Compile / fastLinkJS).dependsOn(Compile / fastLinkJS / copyResources).value,
   )
 
 lazy val tint_browser = project
@@ -52,6 +62,25 @@ lazy val tint_browser = project
       _.withModuleKind(ModuleKind.ESModule),
     },
     scalacOptions += "-deprecation",
+    Compile / fastLinkJS / copyResources := {
+      val stageDir = (LocalRootProject / baseDirectory).value / "stage"
+      val cp = Attributed.data((Compile / dependencyClasspath).value)
+      val stdlib = cp.find(_.getName.startsWith("scalajs-library")).getOrElse {
+        throw new MessageOnlyException(s"Cannot find the scalajs-library in $cp")
+      }
+      IO.copy(Seq((stdlib, stageDir / stdlib.getName)))
+      val sampleCompile = (sample / Compile / compile).value
+      IO.copyDirectory((sample / Compile / classDirectory).value, stageDir / "hello")
+      val reversiCompile = (reversi / Compile / compile).value
+      val reversiDir = stageDir / "reversi"
+      IO.copyDirectory((reversi / Compile / classDirectory).value, stageDir / "reversi")
+      val files = (reversiDir ** "*.sjsir").get
+        .map(_.relativeTo(reversiDir).get.toString)
+        .sorted
+      IO.writeLines(reversiDir / "list.txt", files)
+      Nil
+    },
+    Compile / fastLinkJS := (Compile / fastLinkJS).dependsOn(Compile / fastLinkJS / copyResources).value,
     Compile / fastOptJS / artifactPath := baseDirectory.value / "../stage/main.js"
   )
 

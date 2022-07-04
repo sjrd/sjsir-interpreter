@@ -15,3 +15,9 @@ lowered.hnir
 .dotty-ide*
 /node_modules
 run.log
+/std/
+/stage/hello/
+/stage/reversi/
+/stage/main.js
+/stage/main.js.map
+/stage/*.jar
