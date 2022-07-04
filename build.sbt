@@ -5,12 +5,13 @@ inThisBuild(Def.settings(
 
 val copyArtifact = taskKey[Unit]("Moves compiled JS to staging")
 
-lazy val tint = project
-  .in(file("tint"))
+lazy val root = project
+  .in(file("."))
+
+lazy val `sjsir-interpreter` = project
+  .in(file("core"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
-    Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
-    Test / unmanagedSourceDirectories += baseDirectory.value / "test/src",
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.4.0",
       "com.lihaoyi" %%% "utest" % "0.7.5" % "test",
@@ -22,12 +23,11 @@ lazy val tint = project
     }
   )
 
-lazy val tint_cli = project
-  .dependsOn(tint)
-  .in(file("tint_cli"))
+lazy val `sjsir-interpreter-cli` = project
+  .dependsOn(`sjsir-interpreter`)
+  .in(file("cli"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
-    Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.4.0"
     ),
@@ -47,12 +47,11 @@ lazy val tint_cli = project
     Compile / fastLinkJS := (Compile / fastLinkJS).dependsOn(Compile / fastLinkJS / copyResources).value,
   )
 
-lazy val tint_browser = project
-  .dependsOn(tint)
-  .in(file("tint_browser"))
+lazy val `sjsir-interpreter-browser` = project
+  .dependsOn(`sjsir-interpreter`)
+  .in(file("browser"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
-    Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.4.0",
       "org.scala-js" %%% "scalajs-dom" % "1.1.0"
