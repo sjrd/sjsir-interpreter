@@ -46,6 +46,9 @@ class Executor(val classManager: ClassManager) {
     * @return - a result of evaluation of type js.Any
     */
   def eval(program: Tree)(implicit env: Env): js.Any = program match {
+    case VarDef(_, _, _, _, _) =>
+      throw new AssertionError(s"unexpected VarDef in eval at ${program.pos}")
+
     case Block(trees) => evalStmts(trees)._1
     case Skip() => ()
     case StringLiteral(value) => value
@@ -73,6 +76,9 @@ class Executor(val classManager: ClassManager) {
 
     case SelectStatic(className, FieldIdent(fieldName)) =>
       classManager.getStaticField((className, fieldName))
+
+    case SelectJSNativeMember(_, _) =>
+      unimplemented(program, "eval")
 
     case ArraySelect(array, index) =>
       val instance = eval(array).asInstanceOf[ArrayInstance]
@@ -132,6 +138,9 @@ class Executor(val classManager: ClassManager) {
       val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
       val eargs = evalArgs(methodDef.args, args)
       eval(methodDef.body.get)(Env.empty.bind(eargs))
+
+    case ApplyDynamicImport(_, _, _, _) =>
+      unimplemented(program, "eval")
 
     case New(className, ctor, args) =>
       val instance = new Instance(className)
@@ -250,14 +259,32 @@ class Executor(val classManager: ClassManager) {
     case CreateJSClass(className, captureValues) =>
       createJSClass(className, captureValues, env)
 
+    case JSSuperMethodCall(_, _, _, _) =>
+      unimplemented(program, "eval")
+
     case JSSuperConstructorCall(_) =>
       throw new AssertionError("JSSuperConstructorCall should never be called in eval loop")
+
+    case JSImportCall(_) =>
+      unimplemented(program, "eval")
+
+    case JSImportMeta() =>
+      unimplemented(program, "eval")
+
+    case JSNewTarget() =>
+      unimplemented(program, "eval")
 
     case NewArray(typeRef, lengths) =>
       new ArrayInstance(typeRef, (lengths map eval).asInstanceOf[List[Int]])
 
     case ArrayLength(array) =>
       eval(array).asInstanceOf[ArrayInstance].length
+
+    case RecordValue(_, _) =>
+      throw new AssertionError(s"unexpected RecordValue in eval at ${program.pos}")
+
+    case RecordSelect(_, _) =>
+      throw new AssertionError(s"unexpected RecordSelect in eval at ${program.pos}")
 
     case AsInstanceOf(tree, tpe) =>
       evalAsInstanceOf(eval(tree), tpe, program.pos)
@@ -272,6 +299,9 @@ class Executor(val classManager: ClassManager) {
         eval(ClassOf(array.typeRef))
       case _ => null
     }
+
+    case Clone(_) =>
+      unimplemented(program, "eval")
 
     case ClassOf(typeRef) =>
       classManager.lookupClassInstance(typeRef, {
@@ -301,8 +331,8 @@ class Executor(val classManager: ClassManager) {
     case JSBinaryOp(op, l, r) => JSBinaryOps(op, eval(l), eval(r))
     case JSUnaryOp(op, t) => JSUnaryOps(op, eval(t))
 
-    case rest =>
-      unimplemented(rest, "root")
+    case Transient(_) =>
+      throw new AssertionError(s"unexpected Transient in eval at ${program.pos}")
   }
 
   def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] = {
@@ -385,8 +415,11 @@ class Executor(val classManager: ClassManager) {
     case SelectStatic(className, FieldIdent(fieldName)) =>
       classManager.setStaticField((className, fieldName), value)
 
-    case nonSelect =>
-      throw new AssertionError(s"Selector expected in lhs of Assign, given: $nonSelect")
+    case JSGlobalRef(name) =>
+      unimplemented(selector, "JSGlobalRef(_) = ...")
+
+    case RecordSelect(record, field) =>
+      throw new AssertionError(s"unexpected RecordSelect at ${selector.pos}")
   }
 
   def evalJsFunction(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {

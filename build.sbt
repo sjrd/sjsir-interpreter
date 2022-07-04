@@ -12,6 +12,7 @@ lazy val `sjsir-interpreter` = project
   .in(file("core"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
+    scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.10.1",
       "com.lihaoyi" %%% "utest" % "0.7.5" % "test",
