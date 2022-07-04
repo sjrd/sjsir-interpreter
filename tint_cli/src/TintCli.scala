@@ -14,11 +14,11 @@ object TintCli {
   def main(args: Array[String]): Unit = {
     val irReader = new CliReader(
       "std/scalajs-library_2.13-1.4.0.jar",
-      "sample/target/scala-2.13/classes/sample"
+      "sample/target/scala-2.13/classes"
     )
 
     irReader.irFiles.flatMap { irFiles =>
-      Linker.link(irFiles, ModuleInitializer.mainMethodWithArgs("sample.Sample", "main"))
+      Linker.link(irFiles, ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"))
     }.foreach { moduleSet =>
       val executor = new Executor(ClassManager.fromModuleSet(moduleSet))
       implicit val pos = Position.NoPosition
