@@ -27,7 +27,7 @@ jobs:
 
       - name: Test Core
         run: sbt sjsir-interpreter/test
-      - name: Link CLI
-        run: sbt sjsir-interpreter-cli/fastLinkJS
+      - name: Run CLI
+        run: sbt sjsir-interpreter-cli/run
       - name: Link Browser
         run: sbt sjsir-interpreter-browser/fastOptJS

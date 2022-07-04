@@ -2,19 +2,22 @@ package org.scalajs.sjsirinterpreter.core
 
 import scala.collection.mutable
 import scala.scalajs.js
+
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Types._
-import org.scalajs.linker.standard.LinkedClass
+import org.scalajs.ir.Position
 import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.ClassKind._
 import org.scalajs.ir.Trees.JSNativeLoadSpec.Global
-import Types.TypeOps
+import org.scalajs.linker.standard.LinkedClass
 
 import org.scalajs.sjsirinterpreter.core.ops._
 import org.scalajs.sjsirinterpreter.core.values._
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
+
+import Types.TypeOps
 
 /**
   * Executor is an object performing the evaluation
@@ -252,7 +255,7 @@ class Executor(val classManager: ClassManager) {
       eval(array).asInstanceOf[ArrayInstance].length
 
     case AsInstanceOf(tree, tpe) =>
-      evalAsInstanceOf(eval(tree), tpe)
+      evalAsInstanceOf(eval(tree), tpe, program.pos)
 
     case IsInstanceOf(expr, tpe) =>
       evalIsInstanceOf(eval(expr), tpe)
@@ -300,6 +303,23 @@ class Executor(val classManager: ClassManager) {
   def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] = {
     assert(args.size == values.size, "argument and values list sizes don't match")
     args.map(_.name.name).zip(values map eval).toMap
+  }
+
+  def bindJSArgs(params: List[ParamDef], values: Seq[js.Any]): Map[LocalName, js.Any] = {
+    def expandWithUndefined(n: Int, values: Seq[js.Any]): Seq[js.Any] =
+      if (values.sizeIs >= n) values
+      else values ++ List.fill(n - values.size)(js.undefined)
+
+    val adaptedValues: Seq[js.Any] = params match {
+      case initParams :+ restParam if restParam.rest =>
+        val (fixedValues, restValues) = values.splitAt(initParams.size)
+        expandWithUndefined(initParams.size, fixedValues) :+ js.Array(restValues: _*)
+      case _ =>
+        expandWithUndefined(params.size, values)
+    }
+    assert(adaptedValues.sizeCompare(params) == 0, s"$params <-> $adaptedValues")
+
+    params.map(_.name.name).zip(adaptedValues).toMap
   }
 
   /**
@@ -364,7 +384,7 @@ class Executor(val classManager: ClassManager) {
 
   def evalJsFunction(params: List[ParamDef], body: Tree)(implicit env: Env): js.Any = {
     val call: js.Function2[js.Any, js.Array[js.Any], js.Any] = { (thizz, args) =>
-      val argsMap = params.map(_.name.name).zip(args).toMap
+      val argsMap = bindJSArgs(params, args.toSeq)
       eval(body)(env.bind(argsMap).setThis(thizz))
     }
     new js.Function("body", "return function(...args) { return body(this, args); };")
@@ -373,7 +393,7 @@ class Executor(val classManager: ClassManager) {
 
   def evalJsClosure(params: List[ParamDef], body: Tree)(implicit env: Env): js.Any = {
     val call: js.Function1[js.Array[js.Any], js.Any] = { (args) =>
-      val argsMap = params.map(_.name.name).zip(args).toMap
+      val argsMap = bindJSArgs(params, args.toSeq)
       eval(body)(env.bind(argsMap))
     }
     new js.Function("body", "return (...args) => { return body(args); };")
@@ -408,10 +428,10 @@ class Executor(val classManager: ClassManager) {
     }
   }
 
-  def evalAsInstanceOf(value: js.Any, tpe: Type): js.Any = value match {
+  def evalAsInstanceOf(value: js.Any, tpe: Type, pos: Position): js.Any = value match {
     case null => Types.zeroOf(tpe)
     case x if evalIsInstanceOf(x, tpe) => x
-    case _ => throw new ClassCastException()
+    case _ => throw new ClassCastException(s"$value cannot be cast to $tpe at $pos")
   }
 
   def evalIsInstanceOf(value: js.Any, t: Type): Boolean = (value: Any) match {
@@ -545,7 +565,7 @@ class Executor(val classManager: ClassManager) {
     val parents = js.Dynamic.literal(ParentClass = superClass).asInstanceOf[RawParents]
 
     def preSuperStatements(args: Seq[js.Any]): Env = {
-      val argsMap = ctorDef.args.map(_.name.name).zip(args).toMap
+      val argsMap = bindJSArgs(ctorDef.args, args)
       evalStmts(preludeTree)(env.bind(argsMap))._2
     }
 
