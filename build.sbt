@@ -1,5 +1,5 @@
 inThisBuild(Def.settings(
-  scalaVersion := "2.13.4",
+  scalaVersion := "2.13.8",
   version := "0.1.0-SNAPSHOT",
 ))
 
