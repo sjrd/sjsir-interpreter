@@ -51,7 +51,6 @@ class Executor(val classManager: ClassManager) {
     val sortedInits = staticInits.sortBy(_._1)
 
     for ((cls, methodDef) <- sortedInits) {
-      println(s"static init for ${cls.nameString}")
       assert(methodDef.args.isEmpty, s"static initializer for ${cls.nameString} has arguments ${methodDef.args}")
       execute(methodDef.body.get)
     }
