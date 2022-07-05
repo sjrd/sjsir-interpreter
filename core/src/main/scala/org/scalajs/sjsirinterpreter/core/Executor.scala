@@ -26,6 +26,8 @@ import Types.TypeOps
   * @param classManager - an instance of ClassManager
   */
 class Executor(val classManager: ClassManager) {
+  import Executor._
+
   val jsClasses: mutable.Map[ClassName, js.Dynamic] = mutable.Map()
   val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
   implicit val isSubclass = classManager.isSubclassOf(_, _)
@@ -129,33 +131,43 @@ class Executor(val classManager: ClassManager) {
       }
 
     case Apply(flags, receiver, method, args) =>
+      implicit val pos = program.pos
       val instance = eval(receiver)
-      val className: ClassName = (instance: Any) match {
-        case instance: Instance => instance.className
-        case _: LongInstance => BoxedLongClass
-        case _: CharInstance => BoxedCharacterClass
-        case _: String => BoxedStringClass
-        case _: Byte => BoxedByteClass
-        case _: Short => BoxedShortClass
-        case _: Int => BoxedIntegerClass
-        case _: Float => BoxedFloatClass
-        case _: Double => BoxedDoubleClass
-        case _ => ObjectClass
-      }
-      val methodDef = classManager.lookupMethodDef(className, method.name, MemberNamespace.Public)
-      val eargs = evalArgs(methodDef.args, args)
-      eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
-
-    case ApplyStatically(flags, tree, className, methodIdent, args) => eval(tree) match {
-      case instance: Instance =>
-        val nspace = MemberNamespace.forNonStaticCall(flags)
-        val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
+      if (instance == null) {
+        throw new Exception(s"(null: ${receiver.tpe}).${method.name.displayName} at $pos")
+      } else if (method.name == toStringMethodName && !instance.isInstanceOf[Instance]) {
+        "" + instance
+      } else {
+        val className: ClassName = (instance: Any) match {
+          case instance: Instance => instance.className
+          case _: LongInstance => BoxedLongClass
+          case _: CharInstance => BoxedCharacterClass
+          case _: String => BoxedStringClass
+          case _: Byte => BoxedByteClass
+          case _: Short => BoxedShortClass
+          case _: Int => BoxedIntegerClass
+          case _: Float => BoxedFloatClass
+          case _: Double => BoxedDoubleClass
+          case _ => ObjectClass
+        }
+        val methodDef = classManager.lookupMethodDef(className, method.name, MemberNamespace.Public)
         val eargs = evalArgs(methodDef.args, args)
         eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
-      case rest => unimplemented(rest, "ApplyStatically")
-    }
+      }
+
+    case ApplyStatically(flags, tree, className, methodIdent, args) =>
+      implicit val pos = program.pos
+      eval(tree) match {
+        case instance: Instance =>
+          val nspace = MemberNamespace.forNonStaticCall(flags)
+          val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
+          val eargs = evalArgs(methodDef.args, args)
+          eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
+        case rest => unimplemented(rest, "ApplyStatically")
+      }
 
     case ApplyStatic(flags, className, methodIdent, args) =>
+      implicit val pos = program.pos
       val nspace = MemberNamespace.forStaticCall(flags)
       val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
       val eargs = evalArgs(methodDef.args, args)
@@ -165,6 +177,8 @@ class Executor(val classManager: ClassManager) {
       unimplemented(program, "eval")
 
     case New(className, ctor, args) =>
+      implicit val pos = program.pos
+
       val instance = new Instance(className)
       classManager.superChain(className) { linkedClass =>
         linkedClass.fields.foreach {
@@ -730,4 +744,8 @@ class Executor(val classManager: ClassManager) {
   }
 
   def p = js.Dynamic.global.console.log
+}
+
+object Executor {
+  private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
 }

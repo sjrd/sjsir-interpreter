@@ -4,6 +4,7 @@ import scala.scalajs.js
 import scala.collection.mutable
 import org.scalajs.linker.standard.{ModuleSet, LinkedClass}
 import org.scalajs.ir.Names._
+import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
 import org.scalajs.ir.ClassKind.Interface
@@ -37,7 +38,9 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
     classes.get(name).getOrThrow(s"No class $name in class cache")
   }
 
-  def lookupMethodDef(className: ClassName, methodName: MethodName, nspace: MemberNamespace): MethodDef = {
+  def lookupMethodDef(className: ClassName, methodName: MethodName, nspace: MemberNamespace)(
+      implicit pos: Position): MethodDef = {
+
     def methodMatch(m: MethodDef): Boolean =
       m.methodName == methodName && m.flags.namespace == nspace && m.body.isDefined
 
@@ -65,7 +68,7 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
 
     superChain(Some(className))
       .orElse(lookupInInterfaces(className))
-      .getOrThrow(s"No method $methodName in $className")
+      .getOrThrow(s"No method $methodName in $className at $pos")
   }
 
   def loadModule(className: ClassName, orElse: => Instance): Instance =
