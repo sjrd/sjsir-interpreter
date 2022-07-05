@@ -137,18 +137,18 @@ class Executor(val classManager: ClassManager) {
       } else if (method.name == toStringMethodName && !instance.isInstanceOf[Instance]) {
         "" + instance
       } else {
+        // SJSIRRepresentiveClass(instance)
         val className: ClassName = (instance: Any) match {
           case instance: Instance => instance.className
-          case _: LongInstance => BoxedLongClass
-          case _: CharInstance => BoxedCharacterClass
-          case _: String => BoxedStringClass
-          case _: Byte => BoxedByteClass
-          case _: Short => BoxedShortClass
-          case _: Int => BoxedIntegerClass
-          case _: Float => BoxedFloatClass
-          case _: Double => BoxedDoubleClass
-          case _ => ObjectClass
+          case _: Boolean         => BoxedBooleanClass
+          case _: CharInstance    => BoxedCharacterClass
+          case _: Double          => BoxedDoubleClass // All `number`s use java.lang.Double, by spec
+          case _: LongInstance    => BoxedLongClass
+          case _: String          => BoxedStringClass
+          case ()                 => BoxedUnitClass
+          case _                  => ObjectClass
         }
+
         val methodDef = classManager.lookupMethodDef(className, method.name, MemberNamespace.Public)
         val eargs = evalArgs(methodDef.args, args)
         eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
