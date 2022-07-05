@@ -7,5 +7,5 @@ import scala.scalajs.js
   * from implicit conversion to Int on exit from eval loop.
   */
 class CharInstance(val value: Char) extends js.Object {
-  override def toString(): String = s"CharInstance($value)"
+  override def toString(): String = value.toString()
 }

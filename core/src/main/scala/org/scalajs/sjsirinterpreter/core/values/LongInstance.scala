@@ -7,6 +7,6 @@ import scala.scalajs.js
   * from implicit conversion to Int on exit from eval loop.
   */
 class LongInstance(val value: Long) extends js.Object {
-  override def toString(): String = s"LongInstance($value)"
+  override def toString(): String = value.toString()
 
 }
