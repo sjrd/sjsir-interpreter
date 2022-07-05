@@ -17,7 +17,6 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
   val modules: mutable.Map[ClassName, Instance] = mutable.Map()
   val memberCache: mutable.Map[ClassName, Set[ClassName]] = mutable.Map()
   val methodCache: mutable.Map[(ClassName, MethodName, MemberNamespace), MethodDef] = mutable.Map()
-  val names = new utils.NameGen()
 
   classes.values.foreach { linkedClass =>
 

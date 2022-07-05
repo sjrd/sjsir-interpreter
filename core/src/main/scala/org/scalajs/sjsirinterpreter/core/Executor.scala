@@ -28,7 +28,6 @@ import Types.TypeOps
 class Executor(val classManager: ClassManager) {
   val jsClasses: mutable.Map[ClassName, js.Dynamic] = mutable.Map()
   val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
-  val names = new utils.NameGen()
   implicit val pos = NoPosition
   implicit val isSubclass = classManager.isSubclassOf(_, _)
   val fieldsSymbol = js.Symbol("fields")
@@ -537,20 +536,20 @@ class Executor(val classManager: ClassManager) {
   def genTypeDataObject(typeRef: TypeRef): js.Object = typeRef match {
     case ClassRef(className) =>
       val classDef = classManager.lookupClassDef(className)
-      typeDataLiteral(classDef.fullName, false, classDef.kind == Interface, false)
-    case arrRef @ ArrayTypeRef(_, _) =>
-      typeDataLiteral(names.genArrayName(arrRef), false, false, true)
-    case PrimRef(NoType) => typeDataLiteral("void", true, false, false)
-    case PrimRef(BooleanType) => typeDataLiteral("boolean", true, false, false)
-    case PrimRef(CharType) => typeDataLiteral("char", true, false, false)
-    case PrimRef(ByteType) => typeDataLiteral("byte", true, false, false)
-    case PrimRef(ShortType) => typeDataLiteral("short", true, false, false)
-    case PrimRef(IntType) => typeDataLiteral("int", true, false, false)
-    case PrimRef(LongType) => typeDataLiteral("long", true, false, false)
-    case PrimRef(FloatType) => typeDataLiteral("float", true, false, false)
-    case PrimRef(DoubleType) => typeDataLiteral("double", true, false, false)
-    case PrimRef(NullType) => typeDataLiteral("scala.runtime.Null$", true, false, false)
-    case PrimRef(NothingType) => typeDataLiteral("scala.runtime.Nothing$", true, false, false)
+      typeDataLiteral(className.nameString, false, classDef.kind == Interface, false)
+    case arrRef: ArrayTypeRef =>
+      typeDataLiteral(genArrayName(arrRef), false, false, true)
+    case primRef: PrimRef =>
+      typeDataLiteral(primRef.displayName, true, false, false)
+  }
+
+  private def genArrayName(typeRef: TypeRef): String = typeRef match {
+    case typeRef: PrimRef =>
+      typeRef.charCode.toString
+    case ClassRef(className) =>
+      "L" + className.nameString
+    case ArrayTypeRef(base, dimensions) =>
+      "[" * dimensions + genArrayName(base)
   }
 
   def typeDataLiteral(name: String, isPrimitive: Boolean, isInterface: Boolean, isArrayClass: Boolean): js.Object =
