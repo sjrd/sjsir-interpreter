@@ -155,6 +155,7 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/utils",
+        base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/lang",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/net",
       )
     },
@@ -162,6 +163,19 @@ lazy val `scalajs-test-suite` = project
     Test / sources ~= { sources =>
       sources
         .filter(_.getName != "CollectionsTestBase.scala")
+        .filter(_.getName != "ByteTest.scala") // requires IntegerTest
+        .filter(_.getName != "CharacterTest.scala") // too slow
+        .filter(_.getName != "BooleanTest.scala") // (null: NullType).booleanValue()boolean
+        .filter(_.getName != "ClassTest.scala") // failures
+        .filter(_.getName != "DoubleTest.scala") // CCE
+        .filter(_.getName != "IntegerTest.scala") // division by zero
+        .filter(_.getName != "LongTest.scala") // requires IntegerTest
+        .filter(_.getName != "MathTest.scala") // division by zero
+        .filter(_.getName != "ObjectTest.scala") // Clone
+        .filter(_.getName != "ShortTest.scala") // requires IntegerTest
+        .filter(_.getName != "StringTest.scala") // way too slow (createFromLargeCodePointArray_Issue2553)
+        .filter(_.getName != "SystemTest.scala") // CCE
+        .filter(_.getName != "ThrowablesTest.scala") // Clone
     },
 
     Test / jsEnv := {
