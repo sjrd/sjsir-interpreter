@@ -587,12 +587,19 @@ class Executor(val classManager: ClassManager) {
   def genTypeData(typeRef: TypeRef): js.Any = {
     val typeData = genTypeDataObject(typeRef).asInstanceOf[js.Dynamic]
 
+    typeData.internalTypeRef = typeRef.asInstanceOf[js.Any]
+
     typeData.updateDynamic("isInstance")({ (obj: js.Object) =>
       typeRef match {
         case PrimRef(_) => false
         case nonPrim => evalIsInstanceOf(obj, Types.typeOfRef(nonPrim))
       }
     } : js.Function1[js.Object, js.Any])
+
+    typeData.updateDynamic("isAssignableFrom")({ (that: js.Dynamic) =>
+      val thatTypeRef = that.internalTypeRef.asInstanceOf[TypeRef]
+      isAssignableFrom(typeRef, thatTypeRef)
+    }: js.Function1[js.Dynamic, Boolean])
 
     typeData.updateDynamic("newArrayOfThisClass")({ (args: js.Array[Int]) =>
       new ArrayInstance(ArrayTypeRef.of(typeRef), args.toList)
@@ -606,6 +613,21 @@ class Executor(val classManager: ClassManager) {
     } : js.Function0[js.Any])
 
     typeData
+  }
+
+  private def isAssignableFrom(target: TypeRef, source: TypeRef): Boolean = {
+    (target == source) || {
+      (target, source) match {
+        case (ClassRef(targetCls), ClassRef(sourceCls)) =>
+          isSubclass(sourceCls, targetCls)
+        case (ClassRef(ObjectClass | SerializableClass | CloneableClass), ArrayTypeRef(_, _)) =>
+          true
+        case (target: ArrayTypeRef, source: ArrayTypeRef) =>
+          ArrayType(source) <:< ArrayType(target)
+        case _ =>
+          false
+      }
+    }
   }
 
   def genTypeDataObject(typeRef: TypeRef): js.Object = typeRef match {
