@@ -335,11 +335,20 @@ class Executor(val classManager: ClassManager) {
 
     case GetClass(e) =>
       implicit val pos = program.pos
-      eval(e) match {
+      (eval(e): Any) match {
         case instance: Instance =>
           eval(ClassOf(ClassRef(instance.className)))
         case array: ArrayInstance =>
           eval(ClassOf(array.typeRef))
+        case _: LongInstance => eval(ClassOf(ClassRef(BoxedLongClass)))
+        case _: CharInstance => eval(ClassOf(ClassRef(BoxedCharacterClass)))
+        case _: String       => eval(ClassOf(ClassRef(BoxedStringClass)))
+        case _: Byte         => eval(ClassOf(ClassRef(BoxedByteClass)))
+        case _: Short        => eval(ClassOf(ClassRef(BoxedShortClass)))
+        case _: Int          => eval(ClassOf(ClassRef(BoxedIntegerClass)))
+        case _: Float        => eval(ClassOf(ClassRef(BoxedFloatClass)))
+        case _: Double       => eval(ClassOf(ClassRef(BoxedDoubleClass)))
+        case ()              => eval(ClassOf(ClassRef(BoxedUnitClass)))
         case _ => null
       }
 
