@@ -18,13 +18,21 @@ object Main {
   private implicit val ec: ExecutionContext = ExecutionContext.global
 
   def main(args: Array[String]): Unit = {
-    val irReader = new CliReader(
-      "std/scalajs-library_2.13-1.10.1.jar",
-      "sample/target/scala-2.13/classes"
-    )
+    val (classpath, moduleInitializers) = {
+      val cp = List(
+        "std/scalajs-library_2.13-1.10.1.jar",
+        "sample/target/scala-2.13/classes",
+      )
+      val initializers = List(
+        ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"),
+      )
+      (cp, initializers)
+    }
+
+    val irReader = new CliReader(classpath)
 
     irReader.irFiles.flatMap { irFiles =>
-      Linker.link(irFiles, ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"))
+      Linker.link(irFiles, moduleInitializers)
     }.map { moduleSet =>
       val executor = new Executor(ClassManager.fromModuleSet(moduleSet))
       implicit val pos = Position.NoPosition

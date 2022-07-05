@@ -29,7 +29,7 @@ class Interpreter(
     println("Reading IR...")
     reader.irFiles.flatMap { irFiles =>
       println(s"Linking ${irFiles.size} files")
-      Linker.link(irFiles, ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod))
+      Linker.link(irFiles, List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod)))
     }.foreach { moduleSet =>
       println("ModuleSet loaded...")
       moduleSet.modules.foreach { mod =>

@@ -8,7 +8,7 @@ import org.scalajs.linker.standard._
 
 object Linker {
 
-  def link(irFiles: Seq[IRFile], initializer: ModuleInitializer)(
+  def link(irFiles: Seq[IRFile], initializers: List[ModuleInitializer])(
       implicit ec: ExecutionContext): Future[ModuleSet] = {
     val config = StandardConfig()
       .withOptimizer(false)
@@ -20,7 +20,7 @@ object Linker {
 
     frontend.link(
       irFiles ++ backend.injectedIRFiles,
-      Seq(initializer),
+      initializers,
       backend.symbolRequirements,
       new ScalaConsoleLogger
     )
