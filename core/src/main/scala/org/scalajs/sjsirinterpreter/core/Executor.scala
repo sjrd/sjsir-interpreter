@@ -149,7 +149,14 @@ class Executor(val classManager: ClassManager) {
           case _                  => ObjectClass
         }
 
-        val methodDef = classManager.lookupMethodDef(className, method.name, MemberNamespace.Public)
+        val patchedMethodName = {
+          if (className == BoxedDoubleClass && numberCompareToMethodNames.contains(method.name))
+            doubleCompareToMethodName
+          else
+            method.name
+        }
+
+        val methodDef = classManager.lookupMethodDef(className, patchedMethodName, MemberNamespace.Public)
         val eargs = evalArgs(methodDef.args, args)
         eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
       }
@@ -778,4 +785,17 @@ class Executor(val classManager: ClassManager) {
 
 object Executor {
   private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
+
+  private val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)
+
+  private val numberCompareToMethodNames: Set[MethodName] = {
+    val nonDoubleBoxedClasses = Set(
+      BoxedByteClass,
+      BoxedShortClass,
+      BoxedIntegerClass,
+      BoxedFloatClass,
+    )
+    for (cls <- nonDoubleBoxedClasses) yield
+      MethodName("compareTo", List(ClassRef(cls)), IntRef)
+  }
 }
