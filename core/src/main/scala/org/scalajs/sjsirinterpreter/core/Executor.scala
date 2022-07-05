@@ -31,6 +31,30 @@ class Executor(val classManager: ClassManager) {
   implicit val isSubclass = classManager.isSubclassOf(_, _)
   val fieldsSymbol = js.Symbol("fields")
 
+  runStaticInitializers()
+
+  private def runStaticInitializers(): Unit = {
+    val staticInits = for {
+      (cls, linkedClass) <- classManager.classes.toList
+      staticInit <- linkedClass.methods.find { m =>
+        val methodDef = m.value
+        methodDef.flags.namespace == MemberNamespace.StaticConstructor &&
+        methodDef.methodName.isStaticInitializer
+      }
+    } yield {
+      cls -> staticInit.value
+    }
+
+    // Sort for determinism
+    val sortedInits = staticInits.sortBy(_._1)
+
+    for ((cls, methodDef) <- sortedInits) {
+      println(s"static init for ${cls.nameString}")
+      assert(methodDef.args.isEmpty, s"static initializer for ${cls.nameString} has arguments ${methodDef.args}")
+      execute(methodDef.body.get)
+    }
+  }
+
   def execute(program: Tree): Unit = {
     eval(program)(Env.empty)
   }
