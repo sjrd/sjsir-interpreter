@@ -28,7 +28,6 @@ import Types.TypeOps
 class Executor(val classManager: ClassManager) {
   val jsClasses: mutable.Map[ClassName, js.Dynamic] = mutable.Map()
   val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
-  implicit val pos = NoPosition
   implicit val isSubclass = classManager.isSubclassOf(_, _)
   val fieldsSymbol = js.Symbol("fields")
 
@@ -158,9 +157,11 @@ class Executor(val classManager: ClassManager) {
       eval(ctorDef.body.get)(Env.empty.bind(eargs).setThis(instance))
       instance
 
-    case LoadModule(name) => classManager.loadModule(name, {
-      eval(New(name, MethodIdent(NoArgConstructorName), List())).asInstanceOf[Instance]
-    })
+    case LoadModule(name) =>
+      implicit val pos = program.pos
+      classManager.loadModule(name, {
+        eval(New(name, MethodIdent(NoArgConstructorName), List())).asInstanceOf[Instance]
+      })
 
     case StoreModule(name, tree) =>
       classManager.storeModule(name, eval(tree).asInstanceOf[Instance])
@@ -198,6 +199,7 @@ class Executor(val classManager: ClassManager) {
       }
 
     case Match(selector, cases, default) =>
+      implicit val pos = program.pos
       val scrutinee: MatchableLiteral = (eval(selector): Any) match {
         case x: Int    => IntLiteral(x)
         case x: String => StringLiteral(x)
@@ -242,20 +244,22 @@ class Executor(val classManager: ClassManager) {
 
     case JSNew(ctorTree, args) =>
       val ctor = eval(ctorTree).asInstanceOf[js.Dynamic]
-      js.Dynamic.newInstance(ctor)(evalSpread(args): _*)
+      val eargs = evalSpread(args)
+      js.Dynamic.newInstance(ctor)(eargs: _*)
 
     case JSArrayConstr(items) =>
       js.Array(evalSpread(items): _*)
 
     case LoadJSModule(className) =>
-      jsModules.getOrElseUpdate(className, {
-        eval(JSNew(LoadJSConstructor(className), List()))
-      })
+      implicit val pos = program.pos
+      loadJSModule(className)
 
     case LoadJSConstructor(className) =>
+      implicit val pos = program.pos
       loadJSConstructor(className)
 
     case CreateJSClass(className, captureValues) =>
+      implicit val pos = program.pos
       createJSClass(className, captureValues, env)
 
     case JSSuperMethodCall(_, _, _, _) =>
@@ -291,18 +295,21 @@ class Executor(val classManager: ClassManager) {
     case IsInstanceOf(expr, tpe) =>
       evalIsInstanceOf(eval(expr), tpe)
 
-    case GetClass(e) => eval(e) match {
-      case instance: Instance =>
-        eval(ClassOf(ClassRef(instance.className)))
-      case array: ArrayInstance =>
-        eval(ClassOf(array.typeRef))
-      case _ => null
-    }
+    case GetClass(e) =>
+      implicit val pos = program.pos
+      eval(e) match {
+        case instance: Instance =>
+          eval(ClassOf(ClassRef(instance.className)))
+        case array: ArrayInstance =>
+          eval(ClassOf(array.typeRef))
+        case _ => null
+      }
 
     case Clone(_) =>
       unimplemented(program, "eval")
 
     case ClassOf(typeRef) =>
+      implicit val pos = program.pos
       classManager.lookupClassInstance(typeRef, {
         val tmp = LocalName("dataTmp")
         eval(New(
@@ -452,18 +459,39 @@ class Executor(val classManager: ClassManager) {
     ).asInstanceOf[js.PropertyDescriptor]
   }
 
-  def loadJSConstructor(className: ClassName): js.Any = {
+  def loadJSModule(className: ClassName)(implicit pos: Position): js.Any = {
     val classDef = classManager.lookupClassDef(className)
     classDef.kind match {
-      case NativeJSClass | NativeJSModuleClass => classDef.jsNativeLoadSpec.get match {
-        case Global(ref, path) =>
-          eval(JSGlobalRef((path :+ ref).mkString(".")))(Env.empty)
-        case _ =>
-          throw new AssertionError("Imports are currently not supported")
-      }
-      case JSClass | JSModuleClass => initJSClass(className)
+      case NativeJSModuleClass =>
+        loadJSNativeLoadSpec(classDef.jsNativeLoadSpec.get)
+      case JSModuleClass =>
+        jsModules.getOrElseUpdate(className, {
+          val cls = initJSClass(className)
+          js.Dynamic.newInstance(cls)()
+        })
+      case classKind =>
+        throw new AssertionError(s"Unsupported LoadJSModule for $classKind")
+    }
+  }
+
+  def loadJSConstructor(className: ClassName)(implicit pos: Position): js.Any = {
+    val classDef = classManager.lookupClassDef(className)
+    classDef.kind match {
+      case NativeJSClass =>
+        loadJSNativeLoadSpec(classDef.jsNativeLoadSpec.get)
+      case JSClass =>
+        initJSClass(className)
       case classKind =>
         throw new AssertionError(s"Unsupported LoadJSConstructor for $classKind")
+    }
+  }
+
+  private def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
+    loadSpec match {
+      case Global(ref, path) =>
+        eval(JSGlobalRef((path :+ ref).mkString(".")))(Env.empty)
+      case _ =>
+        throw new AssertionError("Imports are currently not supported")
     }
   }
 
@@ -525,7 +553,7 @@ class Executor(val classManager: ClassManager) {
 
     typeData.updateDynamic("getComponentType")({ () =>
       typeRef match {
-        case ArrayTypeRef(base, _) => eval(ClassOf(base))(Env.empty)
+        case ArrayTypeRef(base, _) => eval(ClassOf(base)(NoPosition))(Env.empty)
         case _ => null
       }
     } : js.Function0[js.Any])
@@ -580,11 +608,15 @@ class Executor(val classManager: ClassManager) {
   }
 
   /* Generates JSClass value */
-  def initJSClass(className: ClassName): js.Dynamic = jsClasses.getOrElseUpdate(className, {
-    createJSClass(className, Nil, Env.empty)
-  })
+  def initJSClass(className: ClassName)(implicit pos: Position): js.Dynamic = {
+    jsClasses.getOrElseUpdate(className, {
+      createJSClass(className, Nil, Env.empty)
+    })
+  }
 
-  def createJSClass(className: ClassName, captureValues: List[Tree], topEnv: Env): js.Dynamic = {
+  def createJSClass(className: ClassName, captureValues: List[Tree], topEnv: Env)(
+      implicit pos: Position): js.Dynamic = {
+
     val linkedClass = classManager.lookupClassDef(className)
     implicit val env = Env.empty.bind(
       evalArgs(linkedClass.jsClassCaptures.getOrElse(Nil), captureValues)(topEnv)
