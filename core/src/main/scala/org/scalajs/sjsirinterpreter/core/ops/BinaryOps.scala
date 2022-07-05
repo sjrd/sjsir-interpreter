@@ -12,6 +12,9 @@ object BinaryOps {
     case === => l eq r
     case !== => l ne r
     case String_+ => "" + l + r
+    case Long_<< => new LongInstance(asLong(l).value << asInt(r))
+    case Long_>>> => new LongInstance(asLong(l).value >>> asInt(r))
+    case Long_>> => new LongInstance(asLong(l).value >> asInt(r))
     case x if 4 <= x && x <= 7 => execBool(op, asBoolean(l), asBoolean(r))
     case x if 8 <= x && x <= 24 => execInt(op, asInt(l), asInt(r))
     case x if 25 <= x && x <= 41 => execLong(op, asLong(l), asLong(r))
@@ -55,9 +58,6 @@ object BinaryOps {
     case Long_| => new LongInstance(l.value | r.value)
     case Long_& => new LongInstance(l.value & r.value)
     case Long_^ => new LongInstance(l.value ^ r.value)
-    case Long_<< => new LongInstance(l.value << r.value)
-    case Long_>>> => new LongInstance(l.value >>> r.value)
-    case Long_>> => new LongInstance(l.value >> r.value)
     case Long_== => l.value == r.value
     case Long_!= => l.value != r.value
     case Long_< => l.value < r.value
