@@ -3,7 +3,7 @@ inThisBuild(Def.settings(
   version := "0.1.0-SNAPSHOT",
 ))
 
-val copyArtifact = taskKey[Unit]("Moves compiled JS to staging")
+val fetchScalaJSSource = taskKey[File]("Fetches the source code of Scala.js")
 
 lazy val root = project
   .in(file("."))
@@ -95,4 +95,83 @@ lazy val reversi = project
   .settings(
     Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     scalaJSUseMainModuleInitializer := true
+  )
+
+lazy val `scalajs-test-suite` = project
+  .in(file("scalajs-test-suite"))
+  .enablePlugins(ScalaJSPlugin, ScalaJSJUnitPlugin)
+  .settings(
+    fetchScalaJSSource / artifactPath :=
+      baseDirectory.value / "fetched-sources" / scalaJSVersion,
+
+    fetchScalaJSSource := {
+      import org.eclipse.jgit.api._
+
+      val s = streams.value
+      val ver = scalaJSVersion
+      val trgDir = (fetchScalaJSSource / artifactPath).value
+
+      if (!trgDir.exists) {
+        s.log.info(s"Fetching Scala.js source version $ver")
+
+        // Make parent dirs and stuff
+        IO.createDirectory(trgDir)
+
+        // Clone scala source code
+        new CloneCommand()
+          .setDirectory(trgDir)
+          .setURI("https://github.com/scala-js/scala-js.git")
+          .call()
+      }
+
+      // Checkout proper ref. We do this anyway so we fail if
+      // something is wrong
+      val git = Git.open(trgDir)
+      s.log.info(s"Checking out Scala source version $ver")
+      git.checkout().setName(s"v$ver").call()
+
+      trgDir
+    },
+
+    Compile / unmanagedSourceDirectories ++= {
+      val base = (fetchScalaJSSource / artifactPath).value
+      Seq(
+        base / "junit-async/js/src/main/scala",
+        base / "test-suite/shared/src/main/scala",
+        base / "test-suite/js/src/main/scala/org/scalajs/testsuite/utils",
+      )
+    },
+
+    Compile / unmanagedSources := (Compile / unmanagedSources).dependsOn(fetchScalaJSSource).value,
+    Test / unmanagedSources := (Test / unmanagedSources).dependsOn(fetchScalaJSSource).value,
+
+    Compile / sources ~= { sources =>
+      sources
+        .filter(_.getName != "TypecheckingMacros.scala")
+        .filter(_.getName != "Typechecking.scala")
+    },
+
+    Test / unmanagedSourceDirectories ++= {
+      val base = (fetchScalaJSSource / artifactPath).value
+      Seq(
+        base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/utils",
+        base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/net",
+      )
+    },
+
+    Test / sources ~= { sources =>
+      sources
+        .filter(_.getName != "CollectionsTestBase.scala")
+    },
+
+    Test / jsEnv := {
+      import org.scalajs.jsenv.nodejs.NodeJSEnv
+      val cp = Attributed.data((Test / fullClasspath).value).mkString(";")
+      val env = Map("SCALAJS_CLASSPATH" -> cp)
+      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
+    },
+
+    Test / jsEnvInput := (`sjsir-interpreter-cli` / Compile / jsEnvInput).value,
+
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
   )

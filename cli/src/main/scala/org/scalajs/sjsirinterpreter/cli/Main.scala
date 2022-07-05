@@ -18,13 +18,20 @@ object Main {
   private implicit val ec: ExecutionContext = ExecutionContext.global
 
   def main(args: Array[String]): Unit = {
-    val (classpath, moduleInitializers) = {
+    val cpEnvVar = js.Dynamic.global.process.env.SCALAJS_CLASSPATH
+    val (classpath, moduleInitializers) = if (js.isUndefined(cpEnvVar)) {
       val cp = List(
         "std/scalajs-library_2.13-1.10.1.jar",
         "sample/target/scala-2.13/classes",
       )
       val initializers = List(
         ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"),
+      )
+      (cp, initializers)
+    } else {
+      val cp = cpEnvVar.asInstanceOf[String].split(';').toList
+      val initializers = List(
+        ModuleInitializer.mainMethod("org.scalajs.testing.bridge.Bridge", "start"),
       )
       (cp, initializers)
     }
