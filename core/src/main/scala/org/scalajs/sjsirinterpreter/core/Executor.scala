@@ -656,6 +656,24 @@ class Executor(val classManager: ClassManager) {
       isAssignableFrom(typeRef, thatTypeRef)
     }: js.Function1[js.Dynamic, Boolean])
 
+    typeData.updateDynamic("checkCast")({ (obj: js.Any) =>
+      implicit val pos = NoPosition
+      typeRef match {
+        case ClassRef(ObjectClass) =>
+          () // OK
+        case ClassRef(className) =>
+          val linkedClass = classManager.classes(className)
+          if (linkedClass.kind.isJSType)
+            () // OK
+          else
+            evalAsInstanceOf(obj, ClassType(className))
+        case typeRef: ArrayTypeRef =>
+          evalAsInstanceOf(obj, ArrayType(typeRef))
+        case _: PrimRef =>
+          throwVMException(ClassCastExceptionClass, s"cannot cast to primitive type ${typeRef.displayName}")
+      }
+    }: js.Function1[js.Any, Unit])
+
     typeData.updateDynamic("newArrayOfThisClass")({ (args: js.Array[Int]) =>
       ArrayInstance.createWithDimensions(ArrayTypeRef.of(typeRef), args.toList)
     } : js.Function1[js.Array[Int], js.Any])
