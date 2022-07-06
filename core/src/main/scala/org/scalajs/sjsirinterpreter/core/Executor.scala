@@ -342,20 +342,19 @@ class Executor(val classManager: ClassManager) {
 
     case GetClass(e) =>
       (eval(e): Any) match {
-        case instance: Instance =>
-          getClassOf(ClassRef(instance.className))
-        case array: ArrayInstance =>
-          getClassOf(array.typeRef)
-        case _: LongInstance => getClassOf(ClassRef(BoxedLongClass))
-        case _: CharInstance => getClassOf(ClassRef(BoxedCharacterClass))
-        case _: String       => getClassOf(ClassRef(BoxedStringClass))
-        case _: Byte         => getClassOf(ClassRef(BoxedByteClass))
-        case _: Short        => getClassOf(ClassRef(BoxedShortClass))
-        case _: Int          => getClassOf(ClassRef(BoxedIntegerClass))
-        case _: Float        => getClassOf(ClassRef(BoxedFloatClass))
-        case _: Double       => getClassOf(ClassRef(BoxedDoubleClass))
-        case ()              => getClassOf(ClassRef(BoxedUnitClass))
-        case _ => null
+        case instance: Instance   => getClassOf(ClassRef(instance.className))
+        case array: ArrayInstance => getClassOf(array.typeRef)
+        case _: LongInstance      => getClassOf(ClassRef(BoxedLongClass))
+        case _: CharInstance      => getClassOf(ClassRef(BoxedCharacterClass))
+        case _: String            => getClassOf(ClassRef(BoxedStringClass))
+        case _: Byte              => getClassOf(ClassRef(BoxedByteClass))
+        case _: Short             => getClassOf(ClassRef(BoxedShortClass))
+        case _: Int               => getClassOf(ClassRef(BoxedIntegerClass))
+        case _: Float             => getClassOf(ClassRef(BoxedFloatClass))
+        case _: Double            => getClassOf(ClassRef(BoxedDoubleClass))
+        case _: Boolean           => getClassOf(ClassRef(BoxedBooleanClass))
+        case ()                   => getClassOf(ClassRef(BoxedUnitClass))
+        case _                    => null
       }
 
     case Clone(_) =>
@@ -821,6 +820,8 @@ class Executor(val classManager: ClassManager) {
 }
 
 object Executor {
+  private val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
+
   private val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
 
   private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
