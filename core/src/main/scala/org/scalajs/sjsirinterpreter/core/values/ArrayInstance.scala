@@ -50,4 +50,12 @@ object ArrayInstance {
     }
     result
   }
+
+  def clone(other: ArrayInstance): ArrayInstance = {
+    val length = other.length
+    val result = new ArrayInstance(other.typeRef, length)
+    for (i <- 0 until length)
+      result(i) = other(i)
+    result
+  }
 }

@@ -184,18 +184,7 @@ class Executor(val classManager: ClassManager) {
 
     case New(className, ctor, args) =>
       implicit val pos = program.pos
-
-      val instance = new Instance(className)
-      classManager.superChain(className) { linkedClass =>
-        linkedClass.fields.foreach {
-          case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
-            instance.setField((linkedClass.className, fieldName), Types.zeroOf(tpe))
-          case JSFieldDef(flags, name, ftpe) =>
-            throw new AssertionError("Trying to init JSField on a Scala class")
-        }
-        attachExportedMembers(instance.asInstanceOf[js.Dynamic], linkedClass)
-      }
-
+      val instance = createNewInstance(className)
       val ctorDef = classManager.lookupMethodDef(className, ctor.name, MemberNamespace.Constructor)
       val eargs = evalArgs(ctorDef.args, args)
       eval(ctorDef.body.get)(Env.empty.bind(eargs).setThis(instance))
@@ -357,8 +346,19 @@ class Executor(val classManager: ClassManager) {
         case _                    => null
       }
 
-    case Clone(_) =>
-      unimplemented(program, "eval")
+    case Clone(expr) =>
+      implicit val pos = program.pos
+      val value = eval(expr)
+      value match {
+        case value: Instance =>
+          val result = createNewInstance(value.className)
+          result.fields ++= value.fields
+          result
+        case value: ArrayInstance =>
+          ArrayInstance.clone(value)
+        case _ =>
+          throw new AssertionError(s"unexpected value $value for Clone at ${program.pos}")
+      }
 
     case ClassOf(typeRef) =>
       getClassOf(typeRef)
@@ -410,6 +410,20 @@ class Executor(val classManager: ClassManager) {
 
     case Transient(_) =>
       throw new AssertionError(s"unexpected Transient in eval at ${program.pos}")
+  }
+
+  private def createNewInstance(className: ClassName)(implicit pos: Position): Instance = {
+    val instance = new Instance(className)
+    classManager.superChain(className) { linkedClass =>
+      linkedClass.fields.foreach {
+        case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
+          instance.setField((linkedClass.className, fieldName), Types.zeroOf(tpe))
+        case JSFieldDef(flags, name, ftpe) =>
+          throw new AssertionError("Trying to init JSField on a Scala class")
+      }
+      attachExportedMembers(instance.asInstanceOf[js.Dynamic], linkedClass)(Env.empty)
+    }
+    instance
   }
 
   private def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {

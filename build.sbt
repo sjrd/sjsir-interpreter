@@ -164,9 +164,7 @@ lazy val `scalajs-test-suite` = project
       sources
         .filter(_.getName != "CollectionsTestBase.scala")
         .filter(_.getName != "CharacterTest.scala") // too slow
-        .filter(_.getName != "ObjectTest.scala") // Clone
         .filter(_.getName != "StringTest.scala") // way too slow (createFromLargeCodePointArray_Issue2553)
-        .filter(_.getName != "ThrowablesTest.scala") // Clone
     },
 
     Test / jsEnv := {
