@@ -103,7 +103,7 @@ object ExecutorTests extends TestSuite{
       val e = intercept[LabelException] {
         executor.eval(Return(IntLiteral(1), label))
       }
-      e.getMessage() ==> "Uncaught Labeled jump: LabelName<here> - 1"
+      e.getMessage() ==> "Uncaught Labeled jump: LabelName<here>"
     }
 
     test("try catch throw") {

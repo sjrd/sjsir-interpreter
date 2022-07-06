@@ -444,12 +444,12 @@ class Executor(val classManager: ClassManager) {
     case Labeled(label, _, body) => try {
       eval(body)
     } catch {
-      case LabelException(retLabel, value) if label == retLabel =>
-        value
+      case ex: LabelException if ex.label == label.name =>
+        ex.value
     }
 
     case Return(expr, label) =>
-      throw LabelException(label, eval(expr))
+      throw new LabelException(label.name, eval(expr))
 
     case BinaryOp(op, l, r) =>
       import BinaryOp._

@@ -109,9 +109,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedCollectionAbstractListTest",
   "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedListAbstractListTest",
   "org.scalajs.testsuite.javalib.util.PriorityQueueTest",
-
-  // Failure - java.lang.UnsupportedOperationException: Trie nodes do not support hashing.
-  "org.scalajs.testsuite.javalib.util.concurrent.ConcurrentHashMapTest",
 )
 
 lazy val `scalajs-test-suite` = project
