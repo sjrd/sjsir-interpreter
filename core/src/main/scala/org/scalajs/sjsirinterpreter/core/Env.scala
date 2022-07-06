@@ -27,6 +27,9 @@ class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any]) {
     lookup(name).value
   }
 
+  def setThis(instance: Option[js.Any]): Env =
+    new Env(table, instance)
+
   def setThis(instance: js.Any) = {
     new Env(table, Some(instance))
   }

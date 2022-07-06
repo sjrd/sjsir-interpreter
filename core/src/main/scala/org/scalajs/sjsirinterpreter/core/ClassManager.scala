@@ -17,14 +17,15 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
   val classInstances: mutable.Map[TypeRef, Instance] = mutable.Map()
   val modules: mutable.Map[ClassName, Instance] = mutable.Map()
   val memberCache: mutable.Map[ClassName, Set[ClassName]] = mutable.Map()
-  val methodCache: mutable.Map[(ClassName, MethodName, MemberNamespace), MethodDef] = mutable.Map()
+  val methodCache: mutable.Map[(ClassName, MethodName, MemberNamespace), (ClassName, MethodDef)] = mutable.Map()
 
   classes.values.foreach { linkedClass =>
 
     memberCache.put(linkedClass.className, Set.from(linkedClass.ancestors))
 
     linkedClass.methods.map(_.value).foreach { method =>
-      methodCache.put((linkedClass.className, method.name.name, method.flags.namespace), method)
+      methodCache.put((linkedClass.className, method.name.name, method.flags.namespace),
+          linkedClass.className -> method)
     }
 
     linkedClass.fields.foreach {
@@ -39,12 +40,12 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
   }
 
   def lookupMethodDef(className: ClassName, methodName: MethodName, nspace: MemberNamespace)(
-      implicit pos: Position): MethodDef = {
+      implicit pos: Position): (ClassName, MethodDef) = {
 
     def methodMatch(m: MethodDef): Boolean =
       m.methodName == methodName && m.flags.namespace == nspace && m.body.isDefined
 
-    def superChain(pivot: Option[ClassName]): Option[MethodDef] = pivot.flatMap { className =>
+    def superChain(pivot: Option[ClassName]): Option[(ClassName, MethodDef)] = pivot.flatMap { className =>
       methodCache.get((className, methodName, nspace))
         .orElse(superChain(classes.get(className).flatMap(_.superClass).map(_.name)))
     }
@@ -54,14 +55,14 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
       pivot.interfaces.map(_.name).map(lookupClassDef).flatMap(interfaceChain)
     }
 
-    def lookupInInterfaces(className: ClassName): Option[MethodDef] = {
+    def lookupInInterfaces(className: ClassName): Option[(ClassName, MethodDef)] = {
       val candidates = interfaceChain(lookupClassDef(className))
       val narrowed = candidates.filterNot {
         case (className, _) => candidates.exists(c => isSubclassOf(c._1, className))
       }
-      narrowed.size match {
-        case 1 => Some(narrowed(0)._2)
-        case 0 => None
+      narrowed match {
+        case only :: Nil => Some(only)
+        case Nil => None
         case _ => throw new AssertionError("Ambiguous interfaces resolution")
       }
     }

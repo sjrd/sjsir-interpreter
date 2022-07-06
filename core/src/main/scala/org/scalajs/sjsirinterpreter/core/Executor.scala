@@ -19,6 +19,46 @@ import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 import Types.TypeOps
 
+final class Stack {
+  import Stack._
+
+  val elements = js.Array[Element]()
+  var currentClassName: ClassName = null
+  var currentMethodName: MethodName = null
+
+  @inline
+  def enter[A](callSitePos: Position, className: ClassName, methodName: MethodName)(body: => A): A = {
+    val prevClassName = currentClassName
+    val prevMethodName = currentMethodName
+    elements.push(new Element(prevClassName, prevMethodName, callSitePos))
+    try {
+      currentClassName = className
+      currentMethodName = methodName
+      body
+    } finally {
+      currentClassName = prevClassName
+      currentMethodName = prevMethodName
+      elements.pop()
+    }
+  }
+
+  @inline
+  def enterJSCode[A](callSitePos: Position)(body: => A): A =
+    enter(callSitePos, null, null)(body)
+
+  def captureStackTrace(pos: Position): List[Element] = {
+    var result: List[Element] = Nil
+    for (i <- 0 until elements.length)
+      result ::= elements(i)
+    result ::= new Element(currentClassName, currentMethodName, pos)
+    result
+  }
+}
+
+object Stack {
+  final class Element(val className: ClassName, val methodName: MethodName, val pos: Position)
+}
+
 /**
   * Executor is an object performing the evaluation
   * and maintaining the global state of the program.
@@ -32,6 +72,8 @@ class Executor(val classManager: ClassManager) {
   val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
   implicit val isSubclass = classManager.isSubclassOf(_, _)
   val fieldsSymbol = js.Symbol("fields")
+
+  private val stack = new Stack()
 
   runStaticInitializers()
 
@@ -58,6 +100,36 @@ class Executor(val classManager: ClassManager) {
 
   def execute(program: Tree): Unit = {
     eval(program)(Env.empty)
+  }
+
+  private def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
+      receiver: Option[js.Any], args: List[js.Any])(
+      implicit pos: Position): js.Any = {
+
+    val (actualClassName, methodDef) = classManager.lookupMethodDef(className, methodName, namespace)
+
+    if (actualClassName == ThrowableClass && methodName == fillInStackTraceMethodName) {
+      val th = receiver.get
+      val stackTrace = stack.captureStackTrace(pos)
+      val stackTraceElements = stackTrace.map { e =>
+        val args = List(
+          if (e.className == null) Null() else StringLiteral(e.className.nameString),
+          if (e.methodName == null) Null() else StringLiteral(e.methodName.simpleName.nameString),
+          if (e.pos.isEmpty) Null() else StringLiteral(e.pos.source.toASCIIString()),
+          if (e.pos.isEmpty) IntLiteral(-1) else IntLiteral(e.pos.line),
+        )
+        eval(New(StackTraceElementClass, MethodIdent(stackTraceElementCtor), args))(Env.empty)
+      }
+      val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
+      applyMethodDefGeneric(ThrowableClass, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
+    }
+
+    stack.enter(pos, actualClassName, methodName) {
+      val innerEnv = methodDef.args.zip(args).foldLeft(Env.empty.setThis(receiver)) { (env, paramAndArg) =>
+        env.bind(paramAndArg._1.name.name, paramAndArg._2)
+      }
+      eval(methodDef.body.get)(innerEnv)
+    }
   }
 
   /**
@@ -156,28 +228,22 @@ class Executor(val classManager: ClassManager) {
             method.name
         }
 
-        val methodDef = classManager.lookupMethodDef(className, patchedMethodName, MemberNamespace.Public)
-        val eargs = evalArgs(methodDef.args, args)
-        eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
+        val eargs = args.map(eval(_))
+        applyMethodDefGeneric(className, patchedMethodName, MemberNamespace.Public, Some(instance), eargs)
       }
 
     case ApplyStatically(flags, tree, className, methodIdent, args) =>
       implicit val pos = program.pos
-      eval(tree) match {
-        case instance: Instance =>
-          val nspace = MemberNamespace.forNonStaticCall(flags)
-          val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
-          val eargs = evalArgs(methodDef.args, args)
-          eval(methodDef.body.get)(Env.empty.bind(eargs).setThis(instance))
-        case rest => unimplemented(rest, "ApplyStatically")
-      }
+      val receiver = eval(tree)
+      val eargs = args.map(eval(_))
+      val namespace = MemberNamespace.forNonStaticCall(flags)
+      applyMethodDefGeneric(className, methodIdent.name, namespace, Some(receiver), eargs)
 
     case ApplyStatic(flags, className, methodIdent, args) =>
       implicit val pos = program.pos
-      val nspace = MemberNamespace.forStaticCall(flags)
-      val methodDef = classManager.lookupMethodDef(className, methodIdent.name, nspace)
-      val eargs = evalArgs(methodDef.args, args)
-      eval(methodDef.body.get)(Env.empty.bind(eargs))
+      val eargs = args.map(eval(_))
+      val namespace = MemberNamespace.forStaticCall(flags)
+      applyMethodDefGeneric(className, methodIdent.name, namespace, None, eargs)
 
     case ApplyDynamicImport(_, _, _, _) =>
       unimplemented(program, "eval")
@@ -185,9 +251,8 @@ class Executor(val classManager: ClassManager) {
     case New(className, ctor, args) =>
       implicit val pos = program.pos
       val instance = createNewInstance(className)
-      val ctorDef = classManager.lookupMethodDef(className, ctor.name, MemberNamespace.Constructor)
-      val eargs = evalArgs(ctorDef.args, args)
-      eval(ctorDef.body.get)(Env.empty.bind(eargs).setThis(instance))
+      val eargs = args.map(eval(_))
+      applyMethodDefGeneric(className, ctor.name, MemberNamespace.Constructor, Some(instance), eargs)
       instance
 
     case LoadModule(name) =>
@@ -263,11 +328,19 @@ class Executor(val classManager: ClassManager) {
       js.special.delete(eval(qualifier), eval(item))
 
     case JSFunctionApply(fun, args) =>
-      eval(fun).asInstanceOf[js.Function].call(js.undefined, evalSpread(args): _*)
+      val efun = eval(fun).asInstanceOf[js.Function]
+      val eargs = evalSpread(args)
+      stack.enterJSCode(program.pos) {
+        efun.call(js.undefined, eargs: _*)
+      }
 
     case JSMethodApply(receiver, method, args) =>
       val obj = eval(receiver).asInstanceOf[RawJSValue]
-      obj.jsMethodApply(eval(method))(evalSpread(args): _*)
+      val meth = eval(method)
+      val eargs = evalSpread(args)
+      stack.enterJSCode(program.pos) {
+        obj.jsMethodApply(meth)(eargs: _*)
+      }
 
     case JSGlobalRef(name) =>
       js.eval(name).asInstanceOf[js.Any]
@@ -278,7 +351,9 @@ class Executor(val classManager: ClassManager) {
     case JSNew(ctorTree, args) =>
       val ctor = eval(ctorTree).asInstanceOf[js.Dynamic]
       val eargs = evalSpread(args)
-      js.Dynamic.newInstance(ctor)(eargs: _*)
+      stack.enterJSCode(program.pos) {
+        js.Dynamic.newInstance(ctor)(eargs: _*)
+      }
 
     case JSArrayConstr(items) =>
       js.Array(evalSpread(items): _*)
@@ -852,11 +927,25 @@ class Executor(val classManager: ClassManager) {
 }
 
 object Executor {
+  val ThrowableClass = ClassName("java.lang.Throwable")
   private val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
+  private val StackTraceElementClass = ClassName("java.lang.StackTraceElement")
+
+  private val BoxedStringRef = ClassRef(BoxedStringClass)
+  private val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
 
   private val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
 
+  private val stackTraceElementCtor =
+    MethodName.constructor(List(BoxedStringRef, BoxedStringRef, BoxedStringRef, IntRef))
+
+  val setStackTraceMethodName =
+    MethodName("setStackTrace", List(StackTraceArrayTypeRef), VoidRef)
+
   private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
+
+  private val fillInStackTraceMethodName =
+    MethodName("fillInStackTrace", Nil, ClassRef(ThrowableClass))
 
   private val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)
 

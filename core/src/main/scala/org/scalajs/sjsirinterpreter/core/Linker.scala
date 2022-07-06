@@ -26,6 +26,8 @@ object Linker {
       callMethod(BoxedDoubleClass, MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)),
       callMethod(BoxedDoubleClass, MethodName("isInfinite", Nil, BooleanRef)),
       callMethod(BoxedDoubleClass, MethodName("isNaN", Nil, BooleanRef)),
+
+      callMethod(Executor.ThrowableClass, Executor.setStackTraceMethodName),
     )
   }
 
