@@ -385,13 +385,45 @@ class Executor(val classManager: ClassManager) {
     case Return(expr, label) =>
       throw LabelException(label, eval(expr))
 
-    case BinaryOp(op, l, r) => BinaryOps(op, eval(l), eval(r))
+    case BinaryOp(op, l, r) =>
+      import BinaryOp._
+      implicit val pos = program.pos
+      op match {
+        case Int_/ | Int_% =>
+          val el = Types.asInt(eval(l))
+          val er = Types.asInt(eval(r))
+          if (er == 0)
+            throwVMException(ArithmeticExceptionClass, "/ by 0")
+          else if (op == Int_/)
+            el / er
+          else
+            el % er
+
+        case Long_/ | Long_% =>
+          val el = Types.asLong(eval(l)).value
+          val er = Types.asLong(eval(r)).value
+          if (er == 0L)
+            throwVMException(ArithmeticExceptionClass, "/ by 0")
+          else if (op == Long_/)
+            new LongInstance(el / er)
+          else
+            new LongInstance(el % er)
+
+        case _ =>
+          BinaryOps(op, eval(l), eval(r))
+      }
+
     case UnaryOp(op, t) => UnaryOps(op, eval(t))
     case JSBinaryOp(op, l, r) => JSBinaryOps(op, eval(l), eval(r))
     case JSUnaryOp(op, t) => JSUnaryOps(op, eval(t))
 
     case Transient(_) =>
       throw new AssertionError(s"unexpected Transient in eval at ${program.pos}")
+  }
+
+  private def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
+    val ex = eval(New(cls, MethodIdent(stringArgCtor), List(StringLiteral(message))))(Env.empty)
+    throw js.JavaScriptException(ex)
   }
 
   def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] = {
@@ -784,6 +816,8 @@ class Executor(val classManager: ClassManager) {
 }
 
 object Executor {
+  private val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
+
   private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
 
   private val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)
