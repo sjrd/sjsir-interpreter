@@ -334,7 +334,8 @@ class Executor(val classManager: ClassManager) {
       throw new AssertionError(s"unexpected RecordSelect in eval at ${program.pos}")
 
     case AsInstanceOf(tree, tpe) =>
-      evalAsInstanceOf(eval(tree), tpe, program.pos)
+      implicit val pos = program.pos
+      evalAsInstanceOf(eval(tree), tpe)
 
     case IsInstanceOf(expr, tpe) =>
       evalIsInstanceOf(eval(expr), tpe)
@@ -580,10 +581,10 @@ class Executor(val classManager: ClassManager) {
     }
   }
 
-  def evalAsInstanceOf(value: js.Any, tpe: Type, pos: Position): js.Any = value match {
+  def evalAsInstanceOf(value: js.Any, tpe: Type)(implicit pos: Position): js.Any = value match {
     case null => Types.zeroOf(tpe)
     case x if evalIsInstanceOf(x, tpe) => x
-    case _ => throw new ClassCastException(s"$value cannot be cast to $tpe at $pos")
+    case _ => throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()} at $pos")
   }
 
   def evalIsInstanceOf(value: js.Any, t: Type): Boolean = (value: Any) match {

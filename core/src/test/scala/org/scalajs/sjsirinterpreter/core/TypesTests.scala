@@ -47,20 +47,18 @@ object TypesTests extends TestSuite{
     }
 
     test("disallowed asInstanceOf") {
-      intercept[ClassCastException] {
+      intercept[Throwable] {
         e.eval(AsInstanceOf(IntLiteral(1), LongType))
       }
-      intercept[ClassCastException] {
+      intercept[Throwable] {
         e.eval(AsInstanceOf(IntLiteral(Int.MaxValue), ShortType))
       }
-      intercept[ClassCastException] {
+      intercept[Throwable] {
         e.eval(AsInstanceOf(ShortLiteral(Short.MaxValue), ByteType))
       }
-      // https://www.scala-js.org/doc/semantics.html
-      // "Floats can behave as Doubles by default"
-      // intercept[ClassCastException] {
-      //   e.eval(AsInstanceOf(DoubleLiteral(Double.MaxValue), FloatType))
-      // }
+      intercept[Throwable] {
+        e.eval(AsInstanceOf(DoubleLiteral(Double.MaxValue), FloatType))
+      }
     }
 
     test("IsInstanceOf") {
