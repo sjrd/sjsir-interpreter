@@ -341,21 +341,20 @@ class Executor(val classManager: ClassManager) {
       evalIsInstanceOf(eval(expr), tpe)
 
     case GetClass(e) =>
-      implicit val pos = program.pos
       (eval(e): Any) match {
         case instance: Instance =>
-          eval(ClassOf(ClassRef(instance.className)))
+          getClassOf(ClassRef(instance.className))
         case array: ArrayInstance =>
-          eval(ClassOf(array.typeRef))
-        case _: LongInstance => eval(ClassOf(ClassRef(BoxedLongClass)))
-        case _: CharInstance => eval(ClassOf(ClassRef(BoxedCharacterClass)))
-        case _: String       => eval(ClassOf(ClassRef(BoxedStringClass)))
-        case _: Byte         => eval(ClassOf(ClassRef(BoxedByteClass)))
-        case _: Short        => eval(ClassOf(ClassRef(BoxedShortClass)))
-        case _: Int          => eval(ClassOf(ClassRef(BoxedIntegerClass)))
-        case _: Float        => eval(ClassOf(ClassRef(BoxedFloatClass)))
-        case _: Double       => eval(ClassOf(ClassRef(BoxedDoubleClass)))
-        case ()              => eval(ClassOf(ClassRef(BoxedUnitClass)))
+          getClassOf(array.typeRef)
+        case _: LongInstance => getClassOf(ClassRef(BoxedLongClass))
+        case _: CharInstance => getClassOf(ClassRef(BoxedCharacterClass))
+        case _: String       => getClassOf(ClassRef(BoxedStringClass))
+        case _: Byte         => getClassOf(ClassRef(BoxedByteClass))
+        case _: Short        => getClassOf(ClassRef(BoxedShortClass))
+        case _: Int          => getClassOf(ClassRef(BoxedIntegerClass))
+        case _: Float        => getClassOf(ClassRef(BoxedFloatClass))
+        case _: Double       => getClassOf(ClassRef(BoxedDoubleClass))
+        case ()              => getClassOf(ClassRef(BoxedUnitClass))
         case _ => null
       }
 
@@ -363,15 +362,7 @@ class Executor(val classManager: ClassManager) {
       unimplemented(program, "eval")
 
     case ClassOf(typeRef) =>
-      implicit val pos = program.pos
-      classManager.lookupClassInstance(typeRef, {
-        val tmp = LocalName("dataTmp")
-        eval(New(
-          ClassClass,
-          MethodIdent(MethodName(ConstructorSimpleName, List(ClassRef(ObjectClass)), VoidRef)),
-          List(VarRef(LocalIdent(tmp))(AnyType))
-        ))(Env.empty.bind(tmp, genTypeData(typeRef))).asInstanceOf[Instance]
-      })
+      getClassOf(typeRef)
 
     case IdentityHashCode(expr) =>
       scala.scalajs.runtime.identityHashCode(eval(expr))
@@ -618,6 +609,18 @@ class Executor(val classManager: ClassManager) {
       ClassType(ObjectClass) <:< t
   }
 
+  private def getClassOf(typeRef: TypeRef): js.Any = {
+    classManager.lookupClassInstance(typeRef, {
+      implicit val pos = NoPosition
+      val tmp = LocalName("dataTmp")
+      eval(New(
+        ClassClass,
+        MethodIdent(MethodName(ConstructorSimpleName, List(ClassRef(ObjectClass)), VoidRef)),
+        List(VarRef(LocalIdent(tmp))(AnyType))
+      ))(Env.empty.bind(tmp, genTypeData(typeRef))).asInstanceOf[Instance]
+    })
+  }
+
   //   def isAssignableFrom(that: ClassData): Boolean = ???
   //   def checkCast(obj: Object): Unit = ???
 
@@ -646,7 +649,7 @@ class Executor(val classManager: ClassManager) {
 
     typeData.updateDynamic("getComponentType")({ () =>
       typeRef match {
-        case ArrayTypeRef(base, _) => eval(ClassOf(base)(NoPosition))(Env.empty)
+        case ArrayTypeRef(base, _) => getClassOf(base)
         case _ => null
       }
     } : js.Function0[js.Any])
