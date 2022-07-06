@@ -686,7 +686,7 @@ class Executor(val classManager: ClassManager) {
     case typeRef: PrimRef =>
       typeRef.charCode.toString
     case ClassRef(className) =>
-      "L" + className.nameString
+      "L" + className.nameString + ";"
     case ArrayTypeRef(base, dimensions) =>
       "[" * dimensions + genArrayName(base)
   }

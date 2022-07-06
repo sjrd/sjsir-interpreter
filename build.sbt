@@ -165,7 +165,6 @@ lazy val `scalajs-test-suite` = project
         .filter(_.getName != "CollectionsTestBase.scala")
         .filter(_.getName != "CharacterTest.scala") // too slow
         .filter(_.getName != "BooleanTest.scala") // (null: NullType).booleanValue()boolean
-        .filter(_.getName != "ClassTest.scala") // failures
         .filter(_.getName != "MathTest.scala") // division by zero
         .filter(_.getName != "ObjectTest.scala") // Clone
         .filter(_.getName != "StringTest.scala") // way too slow (createFromLargeCodePointArray_Issue2553)
