@@ -133,7 +133,7 @@ class Executor(val classManager: ClassManager) {
       implicit val pos = program.pos
       val instance = eval(receiver)
       if (instance == null) {
-        throw new Exception(s"(null: ${receiver.tpe}).${method.name.displayName} at $pos")
+        throwVMException(NullPointerExceptionClass, s"(null: ${receiver.tpe}).${method.name.displayName} at $pos")
       } else if (method.name == toStringMethodName && !instance.isInstanceOf[Instance]) {
         "" + instance
       } else {
