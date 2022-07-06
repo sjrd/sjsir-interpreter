@@ -34,7 +34,7 @@ class ArrayInstance(val typeRef: ArrayTypeRef, lengths: List[Int]) extends js.Ob
 
 object ArrayInstance {
   def fromList(typeRef: ArrayTypeRef, list: List[js.Any]): ArrayInstance = {
-    val instance = new ArrayInstance(ArrayTypeRef(typeRef.base, 1), List(list.size))
+    val instance = new ArrayInstance(typeRef, List(list.size))
     list.zipWithIndex.foreach {
       case (element, i) => instance.array(i) = element
     }

@@ -649,8 +649,9 @@ class Executor(val classManager: ClassManager) {
 
     typeData.updateDynamic("getComponentType")({ () =>
       typeRef match {
-        case ArrayTypeRef(base, _) => getClassOf(base)
-        case _ => null
+        case ArrayTypeRef(base, 1)          => getClassOf(base)
+        case ArrayTypeRef(base, dimensions) => getClassOf(ArrayTypeRef(base, dimensions - 1))
+        case _                              => null
       }
     } : js.Function0[js.Any])
 
