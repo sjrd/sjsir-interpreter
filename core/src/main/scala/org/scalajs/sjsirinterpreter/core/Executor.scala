@@ -322,7 +322,7 @@ class Executor(val classManager: ClassManager) {
       unimplemented(program, "eval")
 
     case NewArray(typeRef, lengths) =>
-      new ArrayInstance(typeRef, (lengths map eval).asInstanceOf[List[Int]])
+      ArrayInstance.createWithDimensions(typeRef, lengths.map(l => Types.asInt(eval(l))))
 
     case ArrayLength(array) =>
       eval(array).asInstanceOf[ArrayInstance].length
@@ -643,7 +643,7 @@ class Executor(val classManager: ClassManager) {
     }: js.Function1[js.Dynamic, Boolean])
 
     typeData.updateDynamic("newArrayOfThisClass")({ (args: js.Array[Int]) =>
-      new ArrayInstance(ArrayTypeRef.of(typeRef), args.toList)
+      ArrayInstance.createWithDimensions(ArrayTypeRef.of(typeRef), args.toList)
     } : js.Function1[js.Array[Int], js.Any])
 
     typeData.updateDynamic("getComponentType")({ () =>

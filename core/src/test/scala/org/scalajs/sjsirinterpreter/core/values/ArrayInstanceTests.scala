@@ -7,7 +7,7 @@ object ArrayInstanceTests extends TestSuite{
 
   val tests = Tests {
     test("basic constructor") {
-      val instance = new ArrayInstance(ArrayTypeRef(IntRef, 1), List(3))
+      val instance = ArrayInstance.createWithDimensions(ArrayTypeRef(IntRef, 1), List(3))
       instance(0) ==> 0
       instance(1) ==> 0
       instance(2) ==> 0
@@ -17,7 +17,7 @@ object ArrayInstanceTests extends TestSuite{
     }
 
     test("nested construction") {
-      val instance = new ArrayInstance(ArrayTypeRef(IntRef, 2), List(2, 2))
+      val instance = ArrayInstance.createWithDimensions(ArrayTypeRef(IntRef, 2), List(2, 2))
       instance(0).asInstanceOf[ArrayInstance](0) ==> 0
       instance(1).asInstanceOf[ArrayInstance](1) ==> 0
 
@@ -33,10 +33,10 @@ object ArrayInstanceTests extends TestSuite{
     }
 
     test("incorrect params") {
-      val e = intercept[IllegalArgumentException] {
-        new ArrayInstance(ArrayTypeRef(IntRef, 1), List(2, 3))
+      val e = intercept[java.lang.AssertionError] {
+        ArrayInstance.createWithDimensions(ArrayTypeRef(IntRef, 1), List(2, 3))
       }
-      e.getMessage() ==> "requirement failed: dimensions don't match"
+      e.getMessage() ==> "invalid lengths List(2, 3) for array type [int"
     }
   }
 }
