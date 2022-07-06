@@ -97,6 +97,23 @@ lazy val reversi = project
     scalaJSUseMainModuleInitializer := true
   )
 
+val ignoredScalaJSTestClasses: Set[String] = Set(
+  // Too slow
+  "org.scalajs.testsuite.javalib.lang.CharacterTest",
+  "org.scalajs.testsuite.javalib.lang.StringTest",
+  "org.scalajs.testsuite.javalib.util.AbstractListTest",
+  "org.scalajs.testsuite.javalib.util.Base64Test",
+  "org.scalajs.testsuite.javalib.util.CollectionsOnAbstractListTest",
+  "org.scalajs.testsuite.javalib.util.CollectionsOnCheckedCollectionAbstractListTest",
+  "org.scalajs.testsuite.javalib.util.CollectionsOnCheckedListAbstractListTest",
+  "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedCollectionAbstractListTest",
+  "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedListAbstractListTest",
+  "org.scalajs.testsuite.javalib.util.PriorityQueueTest",
+
+  // Failure - java.lang.UnsupportedOperationException: Trie nodes do not support hashing.
+  "org.scalajs.testsuite.javalib.util.concurrent.ConcurrentHashMapTest",
+)
+
 lazy val `scalajs-test-suite` = project
   .in(file("scalajs-test-suite"))
   .enablePlugins(ScalaJSPlugin, ScalaJSJUnitPlugin)
@@ -157,14 +174,8 @@ lazy val `scalajs-test-suite` = project
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/utils",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/lang",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/net",
+        base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/util",
       )
-    },
-
-    Test / sources ~= { sources =>
-      sources
-        .filter(_.getName != "CollectionsTestBase.scala")
-        .filter(_.getName != "CharacterTest.scala") // too slow
-        .filter(_.getName != "StringTest.scala") // way too slow (createFromLargeCodePointArray_Issue2553)
     },
 
     Test / jsEnv := {
@@ -176,5 +187,7 @@ lazy val `scalajs-test-suite` = project
 
     Test / jsEnvInput := (`sjsir-interpreter-cli` / Compile / jsEnvInput).value,
 
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
+    Test / testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
+
+    Test / testOptions += Tests.Filter(!ignoredScalaJSTestClasses.contains(_)),
   )
