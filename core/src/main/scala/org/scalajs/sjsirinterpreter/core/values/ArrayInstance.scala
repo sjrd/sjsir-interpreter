@@ -28,6 +28,8 @@ class ArrayInstance(val typeRef: ArrayTypeRef, lengths: List[Int]) extends js.Ob
   def update(index: Int, v: js.Any) = array(index) = v
 
   def length = array.length
+
+  override def toString(): String = s"${typeRef.displayName}@${hashCode().toHexString}"
 }
 
 object ArrayInstance {
