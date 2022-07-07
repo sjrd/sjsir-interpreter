@@ -174,8 +174,10 @@ class Executor(val classManager: ClassManager) {
     case SelectStatic(className, FieldIdent(fieldName)) =>
       classManager.getStaticField((className, fieldName))
 
-    case SelectJSNativeMember(_, _) =>
-      unimplemented(program, "eval")
+    case SelectJSNativeMember(className, MethodIdent(methodName)) =>
+      implicit val pos = program.pos
+      val memberDef = classManager.lookupJSNativeMember(className, methodName)
+      loadJSNativeLoadSpec(memberDef.jsNativeLoadSpec)
 
     case ArraySelect(array, index) =>
       val instance = eval(array).asInstanceOf[ArrayInstance]

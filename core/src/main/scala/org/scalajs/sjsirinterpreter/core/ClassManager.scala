@@ -72,6 +72,12 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
       .getOrThrow(s"No method $methodName in $className at $pos")
   }
 
+  def lookupJSNativeMember(className: ClassName, methodName: MethodName)(implicit pos: Position): JSNativeMemberDef = {
+    val linkedClass = lookupClassDef(className)
+    linkedClass.jsNativeMembers.find(_.name.name == methodName)
+      .getOrThrow(s"No JS native member $methodName in $className at $pos")
+  }
+
   def loadModule(className: ClassName, orElse: => Instance): Instance =
     modules.getOrElseUpdate(className, orElse)
 
