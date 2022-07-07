@@ -109,6 +109,9 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedCollectionAbstractListTest",
   "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedListAbstractListTest",
   "org.scalajs.testsuite.javalib.util.PriorityQueueTest",
+
+  // Failure: Throwable is not a proper subclass of js.Error
+  "org.scalajs.testsuite.compiler.RuntimeTypeTestsJSTest",
 )
 
 lazy val `scalajs-test-suite` = project
@@ -171,6 +174,8 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/compiler",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/utils",
       )
     },
 
