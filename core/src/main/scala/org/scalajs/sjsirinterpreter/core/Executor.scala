@@ -660,7 +660,9 @@ class Executor(val classManager: ClassManager) {
   private def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
     loadSpec match {
       case Global(ref, path) =>
-        eval(JSGlobalRef((path :+ ref).mkString(".")))(Env.empty)
+        path.foldLeft(eval(JSGlobalRef(ref))(Env.empty)) { (prev, pathItem) =>
+          prev.asInstanceOf[RawJSValue].jsPropertyGet(pathItem)
+        }
       case _ =>
         throw new AssertionError("Imports are currently not supported")
     }
