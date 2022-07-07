@@ -734,8 +734,18 @@ class Executor(val classManager: ClassManager) {
 
     typeData.updateDynamic("isInstance")({ (obj: js.Object) =>
       typeRef match {
-        case PrimRef(_) => false
-        case nonPrim => evalIsInstanceOf(obj, Types.typeOfRef(nonPrim))
+        case PrimRef(_) =>
+          false
+        case ClassRef(className) =>
+          val linkedClass = classManager.lookupClassDef(className)
+          if (linkedClass.kind == JSClass || linkedClass.kind == NativeJSClass)
+            js.special.instanceof(obj, loadJSConstructor(className)(NoPosition))
+          else if (linkedClass.kind.isJSType)
+            noIsInstance()
+          else
+            evalIsInstanceOf(obj, ClassType(className))
+        case typeRef: ArrayTypeRef =>
+          evalIsInstanceOf(obj, ArrayType(typeRef))
       }
     } : js.Function1[js.Object, js.Any])
 
@@ -775,6 +785,11 @@ class Executor(val classManager: ClassManager) {
     } : js.Function0[js.Any])
 
     typeData
+  }
+
+  private def noIsInstance(): Nothing = {
+    throw js.JavaScriptException(
+        new js.TypeError("Cannot call isInstance() on a Class representing a JS trait/object"))
   }
 
   private def isAssignableFrom(target: TypeRef, source: TypeRef): Boolean = {
