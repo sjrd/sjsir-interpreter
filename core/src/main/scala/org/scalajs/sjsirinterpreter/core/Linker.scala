@@ -31,9 +31,10 @@ object Linker {
     )
   }
 
-  def link(irFiles: Seq[IRFile], initializers: List[ModuleInitializer])(
+  def link(irFiles: Seq[IRFile], initializers: List[ModuleInitializer], semantics: Semantics)(
       implicit ec: ExecutionContext): Future[ModuleSet] = {
     val config = StandardConfig()
+      .withSemantics(semantics)
       .withOptimizer(false)
       .withCheckIR(false)
       .withBatchMode(false)

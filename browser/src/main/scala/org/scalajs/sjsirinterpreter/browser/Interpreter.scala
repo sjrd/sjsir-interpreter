@@ -3,11 +3,11 @@ package org.scalajs.sjsirinterpreter.browser
 import scala.scalajs.js
 import js.annotation._
 import scala.concurrent.ExecutionContext
-import org.scalajs.linker.interface.ModuleInitializer
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
 import org.scalajs.ir.Position
+import org.scalajs.linker.interface.{ModuleInitializer, Semantics}
 import org.scalajs.linker.interface.unstable.ModuleInitializerImpl._
 import org.scalajs.linker.standard.MemIRFileImpl
 
@@ -29,7 +29,8 @@ class Interpreter(
     println("Reading IR...")
     reader.irFiles.flatMap { irFiles =>
       println(s"Linking ${irFiles.size} files")
-      Linker.link(irFiles, List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod)))
+      val initializers = List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod))
+      Linker.link(irFiles, initializers, Semantics.Defaults)
     }.foreach { moduleSet =>
       println("ModuleSet loaded...")
       moduleSet.modules.foreach { mod =>

@@ -174,6 +174,8 @@ lazy val `scalajs-test-suite` = project
       )
     },
 
+    Test / scalacOptions += "-P:scalajs:genStaticForwardersForNonTopLevelObjects",
+
     Test / jsEnv := {
       import org.scalajs.jsenv.nodejs.NodeJSEnv
       val cp = Attributed.data((Test / fullClasspath).value).mkString(";")

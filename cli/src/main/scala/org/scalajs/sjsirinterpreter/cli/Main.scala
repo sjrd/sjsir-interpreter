@@ -9,7 +9,7 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Types._
 import org.scalajs.ir.Names.ClassName
 import org.scalajs.linker.interface.unstable.ModuleInitializerImpl._
-import org.scalajs.linker.interface.ModuleInitializer
+import org.scalajs.linker.interface.{ModuleInitializer, Semantics}
 
 import org.scalajs.sjsirinterpreter.core._
 
@@ -19,7 +19,7 @@ object Main {
 
   def main(args: Array[String]): Unit = {
     val cpEnvVar = js.Dynamic.global.process.env.SCALAJS_CLASSPATH
-    val (classpath, moduleInitializers) = if (js.isUndefined(cpEnvVar)) {
+    val (classpath, moduleInitializers, semantics) = if (js.isUndefined(cpEnvVar)) {
       val cp = List(
         "std/scalajs-library_2.13-1.10.1.jar",
         "sample/target/scala-2.13/classes",
@@ -27,19 +27,22 @@ object Main {
       val initializers = List(
         ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"),
       )
-      (cp, initializers)
+      val semantics = Semantics.Defaults
+      (cp, initializers, semantics)
     } else {
       val cp = cpEnvVar.asInstanceOf[String].split(';').toList
-      val initializers = List(
+      val initializers0 = List(
         ModuleInitializer.mainMethod("org.scalajs.testing.bridge.Bridge", "start"),
       )
-      (cp, initializers)
+      val initializers = initializers0 ::: TestSuiteLinkerOptions.moduleInitializers
+      val semantics = TestSuiteLinkerOptions.semantics(Semantics.Defaults)
+      (cp, initializers, semantics)
     }
 
     val irReader = new CliReader(classpath)
 
     irReader.irFiles.flatMap { irFiles =>
-      Linker.link(irFiles, moduleInitializers)
+      Linker.link(irFiles, moduleInitializers, semantics)
     }.map { moduleSet =>
       val executor = new Executor(ClassManager.fromModuleSet(moduleSet))
       implicit val pos = Position.NoPosition
