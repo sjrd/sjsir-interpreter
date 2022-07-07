@@ -266,18 +266,22 @@ class Executor(val classManager: ClassManager) {
 
     case Assign(lhs, rhs) => evalAssign(lhs, eval(rhs))
 
-    case TryCatch(block, err, _, handler) => try {
-      eval(block)
-    } catch {
-      case js.JavaScriptException(e) =>
-        eval(handler)(env.bind(err.name, e.asInstanceOf[js.Any]))
-    }
+    case TryCatch(block, err, _, handler) =>
+      try {
+        eval(block)
+      } catch {
+        case js.JavaScriptException(e) =>
+          eval(handler)(env.bind(err.name, e.asInstanceOf[js.Any]))
+        case e: Throwable if !e.isInstanceOf[LabelException] =>
+          eval(handler)(env.bind(err.name, e.asInstanceOf[js.Any]))
+      }
 
-    case TryFinally(block, finalizer) => try {
-      eval(block)
-    } finally {
-      eval(finalizer)
-    }
+    case TryFinally(block, finalizer) =>
+      try {
+        eval(block)
+      } finally {
+        eval(finalizer)
+      }
 
     case Throw(e) =>
       throw new js.JavaScriptException(eval(e))
