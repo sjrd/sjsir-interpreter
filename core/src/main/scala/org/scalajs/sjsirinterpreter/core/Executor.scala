@@ -593,7 +593,10 @@ class Executor(val classManager: ClassManager) {
       classManager.setStaticField((className, fieldName), value)
 
     case JSGlobalRef(name) =>
-      unimplemented(selector, "JSGlobalRef(_) = ...")
+      val argName = if (name == "value") "x" else "value"
+      val fun = new js.Function(argName, s"""$name = $argName;""").asInstanceOf[js.Function1[js.Any, Unit]]
+      fun(value)
+      ()
 
     case RecordSelect(record, field) =>
       throw new AssertionError(s"unexpected RecordSelect at ${selector.pos}")
