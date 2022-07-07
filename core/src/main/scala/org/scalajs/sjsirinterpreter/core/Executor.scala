@@ -795,7 +795,8 @@ class Executor(val classManager: ClassManager) {
   def genTypeDataObject(typeRef: TypeRef): js.Object = typeRef match {
     case ClassRef(className) =>
       val classDef = classManager.lookupClassDef(className)
-      typeDataLiteral(className.nameString, false, classDef.kind == Interface, false)
+      val runtimeClassName = classManager.runtimeClassName(classDef)
+      typeDataLiteral(runtimeClassName, false, classDef.kind == Interface, false)
     case arrRef: ArrayTypeRef =>
       typeDataLiteral(genArrayName(arrRef), false, false, true)
     case primRef: PrimRef =>

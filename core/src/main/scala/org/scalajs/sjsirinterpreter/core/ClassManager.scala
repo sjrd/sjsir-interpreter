@@ -2,6 +2,8 @@ package org.scalajs.sjsirinterpreter.core
 
 import scala.scalajs.js
 import scala.collection.mutable
+import org.scalajs.linker.interface.Semantics
+import org.scalajs.linker.interface.unstable.RuntimeClassNameMapperImpl
 import org.scalajs.linker.standard.{ModuleSet, LinkedClass}
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
@@ -12,7 +14,7 @@ import org.scalajs.ir.ClassKind.Interface
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 import org.scalajs.sjsirinterpreter.core.values._
 
-class ClassManager(val classes: Map[ClassName, LinkedClass]) {
+class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Semantics) {
   val staticFields: mutable.Map[(ClassName, FieldName), js.Any] = mutable.Map()
   val classInstances: mutable.Map[TypeRef, Instance] = mutable.Map()
   val modules: mutable.Map[ClassName, Instance] = mutable.Map()
@@ -123,11 +125,17 @@ class ClassManager(val classes: Map[ClassName, LinkedClass]) {
   def isSubclassOf(lhs: ClassName, rhs: ClassName): Boolean = {
     memberCache.get(lhs).get.contains(rhs)
   }
+
+  def runtimeClassName(linkedClass: LinkedClass): String =
+    RuntimeClassNameMapperImpl.map(semantics.runtimeClassNameMapper, linkedClass.fullName)
 }
 
 object ClassManager {
-  def fromModuleSet(moduleSet: ModuleSet): ClassManager =
-    new ClassManager(moduleSet.modules.flatMap(_.classDefs).map(c => (c.name.name, c)).toMap)
+  def fromModuleSet(moduleSet: ModuleSet): ClassManager = {
+    val classes = moduleSet.modules.flatMap(_.classDefs).map(c => (c.name.name, c)).toMap
+    new ClassManager(classes, moduleSet.coreSpec.semantics)
+  }
 
-  def empty = new ClassManager(Map())
+  def empty: ClassManager =
+    new ClassManager(Map(), Semantics.Defaults)
 }
