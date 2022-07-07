@@ -147,12 +147,14 @@ lazy val `scalajs-test-suite` = project
       trgDir
     },
 
+    libraryDependencies += "org.scala-js" %% "scalajs-junit-test-runtime" % scalaJSVersion,
+
     Compile / unmanagedSourceDirectories ++= {
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "junit-async/js/src/main/scala",
         base / "test-suite/shared/src/main/scala",
-        base / "test-suite/js/src/main/scala/org/scalajs/testsuite/utils",
+        base / "test-suite/js/src/main/scala",
       )
     },
 
@@ -169,6 +171,7 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/utils",
+        base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/compiler",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/lang",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/net",
         base / "test-suite/shared/src/test/scala/org/scalajs/testsuite/javalib/util",

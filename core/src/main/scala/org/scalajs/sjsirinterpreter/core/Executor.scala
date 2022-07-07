@@ -141,8 +141,10 @@ class Executor(val classManager: ClassManager) {
     * @return - a result of evaluation of type js.Any
     */
   def eval(program: Tree)(implicit env: Env): js.Any = program match {
-    case VarDef(_, _, _, _, _) =>
-      throw new AssertionError(s"unexpected VarDef in eval at ${program.pos}")
+    case VarDef(_, _, _, _, rhs) =>
+      // This an "orphan" VarDef, not in a Block. Evaluate rhs and throw it away.
+      eval(rhs)
+      ()
 
     case Block(trees) => evalStmts(trees)._1
     case Skip() => ()
