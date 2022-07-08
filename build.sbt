@@ -113,9 +113,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   // Failure: Throwable is not a proper subclass of js.Error
   "org.scalajs.testsuite.compiler.RuntimeTypeTestsJSTest",
   "org.scalajs.testsuite.javalib.lang.ThrowableJSTest",
-
-  // One test demands that we create top-level let's, not var's, and we cannot do that
-  "org.scalajs.testsuite.jsinterop.ExportsTest",
 )
 
 lazy val `scalajs-test-suite` = project

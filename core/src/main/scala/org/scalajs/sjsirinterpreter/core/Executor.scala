@@ -105,9 +105,17 @@ class Executor(val classManager: ClassManager) {
       .map(_.exportName)
 
     if (topLevelVars.nonEmpty) {
-      // We have to use 'var' in sloppy mode to be able to create something at the top-level
-      val declarerScript = topLevelVars.mkString("var ", ",", ";\n")
-      js.eval(declarerScript)
+      if (js.typeOf(js.Dynamic.global.require) == "function") {
+        // If we have `require`, we cheat to be able to create true 'let's
+        val vm = js.Dynamic.global.require("vm")
+        val declarerScript = topLevelVars.mkString("let ", ",", ";\n")
+        val script = js.Dynamic.newInstance(vm.Script)(declarerScript)
+        script.runInThisContext()
+      } else {
+        // We have to use 'var' in sloppy mode to be able to create something at the top-level
+        val declarerScript = topLevelVars.mkString("var ", ",", ";\n")
+        js.eval(declarerScript)
+      }
     }
   }
 
