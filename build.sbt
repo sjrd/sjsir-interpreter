@@ -180,6 +180,7 @@ lazy val `scalajs-test-suite` = project
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/junit",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/niobuffer",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/scalalib",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/typedarray",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/utils",
       )
     },

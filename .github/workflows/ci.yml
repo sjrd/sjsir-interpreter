@@ -143,3 +143,22 @@ jobs:
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.scalalib.*
         run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.scalalib.*'
+
+  scalajs-test-suite-typedarray:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.typedarray.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.typedarray.*'
