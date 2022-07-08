@@ -12,7 +12,6 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.ClassKind._
-import org.scalajs.ir.Trees.JSNativeLoadSpec.Global
 import org.scalajs.linker.standard.LinkedClass
 
 import org.scalajs.sjsirinterpreter.core.ops._
@@ -706,12 +705,14 @@ class Executor(val classManager: ClassManager) {
 
   private def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
     loadSpec match {
-      case Global(ref, path) =>
+      case JSNativeLoadSpec.Global(ref, path) =>
         path.foldLeft(eval(JSGlobalRef(ref))(Env.empty)) { (prev, pathItem) =>
           prev.asInstanceOf[RawJSValue].jsPropertyGet(pathItem)
         }
-      case _ =>
+      case JSNativeLoadSpec.Import(_, _) =>
         throw new AssertionError("Imports are currently not supported")
+      case JSNativeLoadSpec.ImportWithGlobalFallback(_, globalSpec) =>
+        loadJSNativeLoadSpec(globalSpec)
     }
   }
 
