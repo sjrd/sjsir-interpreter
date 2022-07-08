@@ -116,7 +116,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
 
   // Not yet investigated
   "org.scalajs.testsuite.jsinterop.ExportsTest",
-  "org.scalajs.testsuite.jsinterop.JSNativeInPackage",
   "org.scalajs.testsuite.jsinterop.JSSymbolTest",
   "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
   "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
@@ -201,7 +200,15 @@ lazy val `scalajs-test-suite` = project
       new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
     },
 
-    Test / jsEnvInput := (`sjsir-interpreter-cli` / Compile / jsEnvInput).value,
+    Test / jsEnvInput := {
+      val base = fetchScalaJSSource.value
+      val f = (base / "test-suite/js/src/test/resources/NonNativeJSTypeTestNatives.js").toPath
+      val resourcesInput = org.scalajs.jsenv.Input.Script(f)
+
+      val interpreterInput = (`sjsir-interpreter-cli` / Compile / jsEnvInput).value
+
+      resourcesInput +: interpreterInput
+    },
 
     Test / testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
 
