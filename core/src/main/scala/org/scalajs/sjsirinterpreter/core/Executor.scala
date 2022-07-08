@@ -521,7 +521,14 @@ class Executor(val classManager: ClassManager) {
   }
 
   private def createNewInstance(className: ClassName)(implicit pos: Position): Instance = {
-    val instance = new Instance(className)
+    val jsClass = jsClasses.getOrElseUpdate(className, {
+      class SpecificClass extends Instance(className)
+      val ctor = js.constructorOf[SpecificClass]
+      setFunctionName(ctor, className.nameString)
+      ctor
+    })
+
+    val instance = js.Dynamic.newInstance(jsClass)().asInstanceOf[Instance]
     classManager.superChain(className) { linkedClass =>
       linkedClass.fields.foreach {
         case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
@@ -952,8 +959,14 @@ class Executor(val classManager: ClassManager) {
       postSuperStatements(this, preSuperEnv)
     }
     val ctor = js.constructorOf[Subclass]
+    setFunctionName(ctor, className.nameString)
     attachExportedMembers(ctor.prototype, ctor, linkedClass)
     ctor
+  }
+
+  def setFunctionName(f: js.Any, name: String): Unit = {
+    js.Object.defineProperty(f.asInstanceOf[js.Object], "name",
+        Descriptor.make(configurable = true, false, false, name))
   }
 
   def attachExportedMembers(targetObject: js.Any, staticTarget: js.Any, linkedClass: LinkedClass)(

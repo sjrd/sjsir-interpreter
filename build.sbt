@@ -118,7 +118,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.jsinterop.ExportsTest",
   "org.scalajs.testsuite.jsinterop.JSNativeInPackage",
   "org.scalajs.testsuite.jsinterop.JSSymbolTest",
-  "org.scalajs.testsuite.jsinterop.MiscInteropTest",
   "org.scalajs.testsuite.jsinterop.ModulesWithGlobalFallbackTest",
   "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
   "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
