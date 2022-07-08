@@ -122,7 +122,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.jsinterop.ModulesWithGlobalFallbackTest",
   "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
   "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
-  "org.scalajs.testsuite.jsinterop.SpecialTest",
 )
 
 lazy val `scalajs-test-suite` = project

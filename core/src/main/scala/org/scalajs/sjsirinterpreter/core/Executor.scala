@@ -1,7 +1,9 @@
 package org.scalajs.sjsirinterpreter.core
 
 import scala.collection.mutable
+
 import scala.scalajs.js
+import scala.scalajs.LinkingInfo
 
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Names._
@@ -80,6 +82,16 @@ class Executor(val classManager: ClassManager) {
   val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
   implicit val isSubclass = classManager.isSubclassOf(_, _)
   val fieldsSymbol = js.Symbol("fields")
+
+  val linkingInfo: js.Object = {
+    js.Object.freeze(js.Dynamic.literal(
+      esVersion = LinkingInfo.ESVersion.ES2015,
+      assumingES6 = true,
+      productionMode = false,
+      linkerVersion = ScalaJSVersions.current,
+      fileLevelThis = js.Dynamic.global.globalThis,
+    ))
+  }
 
   private val stack = new Stack()
 
@@ -171,7 +183,8 @@ class Executor(val classManager: ClassManager) {
     case This() => env.getThis
     case VarRef(LocalIdent(name)) => env.get(name)
 
-    case JSLinkingInfo() => scala.scalajs.runtime.linkingInfo
+    case JSLinkingInfo() =>
+      linkingInfo
 
     case Select(tree, className, field) => eval(tree) match {
       case instance: Instance =>
