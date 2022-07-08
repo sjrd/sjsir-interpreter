@@ -3,6 +3,7 @@ package org.scalajs.sjsirinterpreter.core
 import scala.collection.mutable
 
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters._
 import scala.scalajs.LinkingInfo
 
 import org.scalajs.ir.Trees._
@@ -664,23 +665,27 @@ class Executor(val classManager: ClassManager) {
     }: JSVarArgsFunction
   }
 
-  def evalGetter(className: String, propNameString: String, t: Tree)(
-      implicit env: Env, pos: Position): js.Any = {
+  def createJSPropGetter(className: String, propNameString: String, t: Tree)(
+      implicit env: Env, pos: Position): js.Function0[scala.Any] = {
     createJSThisFunction(className, propNameString, Nil, None, t)
+      .asInstanceOf[js.Function0[scala.Any]]
   }
 
-  def evalSetter(className: String, propNameString: String, t: (ParamDef, Tree))(
-      implicit env: Env, pos: Position): js.Any = {
+  def createJSPropSetter(className: String, propNameString: String, t: (ParamDef, Tree))(
+      implicit env: Env, pos: Position): js.Function1[scala.Any, scala.Any] = {
     createJSThisFunction(className, propNameString, List(t._1), None, t._2)
+      .asInstanceOf[js.Function1[scala.Any, scala.Any]]
   }
 
-  def evalPropertyDescriptor(className: String, propNameString: String, desc: JSPropertyDef)(
+  def createJSPropertyDescriptor(className: String, propNameString: String, desc: JSPropertyDef)(
       implicit env: Env): js.PropertyDescriptor = {
     implicit val pos = desc.pos
-    js.Dynamic.literal(
-      get = desc.getterBody.map(evalGetter(className, propNameString, _)).getOrElse(js.undefined),
-      set = desc.setterArgAndBody.map(evalSetter(className, propNameString, _)).getOrElse(js.undefined)
-    ).asInstanceOf[js.PropertyDescriptor]
+    new js.PropertyDescriptor {
+      configurable = true
+      enumerable = false
+      get = desc.getterBody.map(createJSPropGetter(className, propNameString, _)).orUndefined
+      set = desc.setterArgAndBody.map(createJSPropSetter(className, propNameString, _)).orUndefined
+    }
   }
 
   def loadJSModule(className: ClassName)(implicit pos: Position): js.Any = {
@@ -1014,7 +1019,7 @@ class Executor(val classManager: ClassManager) {
 
       case descriptor @ JSPropertyDef(flags, name, _, _) =>
         val prop = eval(name)
-        val desc = evalPropertyDescriptor(classNameString, prop.toString(), descriptor)
+        val desc = createJSPropertyDescriptor(classNameString, prop.toString(), descriptor)
         js.Dynamic.global.Object.defineProperty(targetForFlags(flags), prop, desc)
     }
   }

@@ -39,7 +39,7 @@ object ObjectTests extends TestSuite{
     test("property descriptor") {
       val obj = js.Dynamic.literal(x = 10)
       val selector = JSSelect(This()(AnyType), StringLiteral("x"))
-      val descriptor = executor.evalPropertyDescriptor("Anon", "y", JSPropertyDef(
+      val descriptor = executor.createJSPropertyDescriptor("Anon", "y", JSPropertyDef(
         MemberFlags.empty,
         StringLiteral("y"),
         Some(JSUnaryOp(JSUnaryOp.-, selector)),
