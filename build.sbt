@@ -178,6 +178,7 @@ lazy val `scalajs-test-suite` = project
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/compiler",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/javalib",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/junit",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/library",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/niobuffer",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/scalalib",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/typedarray",
@@ -188,6 +189,7 @@ lazy val `scalajs-test-suite` = project
     Test / sources := {
       (Test / sources).value
         .filter(_.getName() != "TimerTest.scala") // requires jsinterop.TimeoutMock
+        .filter(_.getName() != "UnionTypeTest.scala") // requires typechecking macros
     },
 
     Test / scalacOptions += "-P:scalajs:genStaticForwardersForNonTopLevelObjects",
