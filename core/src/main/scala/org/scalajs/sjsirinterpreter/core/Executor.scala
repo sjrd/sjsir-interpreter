@@ -504,7 +504,7 @@ class Executor(val classManager: ClassManager) {
         case JSFieldDef(flags, name, ftpe) =>
           throw new AssertionError("Trying to init JSField on a Scala class")
       }
-      attachExportedMembers(instance.asInstanceOf[js.Dynamic], linkedClass)(Env.empty)
+      attachExportedMembers(instance, linkedClass)(Env.empty)
     }
     instance
   }
@@ -896,11 +896,11 @@ class Executor(val classManager: ClassManager) {
       postSuperStatements(this, preSuperEnv)
     }
     val ctor = js.constructorOf[Subclass]
-    attachExportedMembers(ctor.selectDynamic("prototype"), linkedClass)
+    attachExportedMembers(ctor.prototype, linkedClass)
     ctor
   }
 
-  def attachExportedMembers(dynamic: js.Dynamic, linkedClass: LinkedClass)(implicit env: Env): Unit =
+  def attachExportedMembers(targetObject: js.Any, linkedClass: LinkedClass)(implicit env: Env): Unit = {
     linkedClass.exportedMembers.map(_.value).foreach {
       case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
           if flags.namespace == MemberNamespace.Public && linkedClass.kind.isJSClass =>
@@ -910,15 +910,16 @@ class Executor(val classManager: ClassManager) {
         ()
 
       case JSMethodDef(flags, name, args, restParam, body) =>
-        val methodName = eval(name).asInstanceOf[String]
+        val methodName = eval(name).asInstanceOf[js.Any]
         val methodBody = evalJsFunction(args, restParam, body)
-        dynamic.updateDynamic(methodName)(methodBody)
+        targetObject.asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
 
       case descriptor @ JSPropertyDef(_, name, _, _) =>
-        val prop = eval(name).asInstanceOf[String]
+        val prop = eval(name)
         val desc = evalPropertyDescriptor(descriptor)
-        js.Object.defineProperty(dynamic.asInstanceOf[js.Object], prop, desc)
+        js.Dynamic.global.Object.defineProperty(targetObject, prop, desc)
     }
+  }
 
   def attachFields(obj: js.Object, linkedClass: LinkedClass)(implicit env: Env) = {
     val fieldContainer = if (linkedClass.fields.exists(_.isInstanceOf[FieldDef])) {
