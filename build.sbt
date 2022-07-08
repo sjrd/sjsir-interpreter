@@ -189,6 +189,7 @@ lazy val `scalajs-test-suite` = project
     },
 
     Test / scalacOptions += "-P:scalajs:genStaticForwardersForNonTopLevelObjects",
+    Test / scalacOptions += "-P:scalajs:nowarnGlobalExecutionContext",
 
     Test / jsEnv := {
       import org.scalajs.jsenv.nodejs.NodeJSEnv
