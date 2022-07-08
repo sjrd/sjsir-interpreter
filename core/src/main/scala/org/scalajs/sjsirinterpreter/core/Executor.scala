@@ -605,21 +605,17 @@ class Executor(val classManager: ClassManager) {
   }
 
   def evalJsFunction(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
-    val call: js.Function2[js.Any, js.Array[js.Any], js.Any] = { (thizz, args) =>
+    { (thizz, args) =>
       val argsMap = bindJSArgs(params, restParam, args.toSeq)
       eval(body)(env.bind(argsMap).setThis(thizz))
-    }
-    new js.Function("body", "return function(...args) { return body(this, args); };")
-      .asInstanceOf[js.Function1[js.Function, js.Any]].apply(call)
+    }: JSVarArgsThisFunction
   }
 
   def evalJsClosure(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
-    val call: js.Function1[js.Array[js.Any], js.Any] = { (args) =>
+    { (args) =>
       val argsMap = bindJSArgs(params, restParam, args.toSeq)
       eval(body)(env.bind(argsMap))
-    }
-    new js.Function("body", "return (...args) => { return body(args); };")
-      .asInstanceOf[js.Function1[js.Function, js.Any]].apply(call)
+    }: JSVarArgsFunction
   }
 
   def evalGetter(t: Tree)(implicit env: Env): js.ThisFunction0[js.Any, js.Any] =
@@ -987,5 +983,13 @@ object Executor {
     )
     for (cls <- nonDoubleBoxedClasses) yield
       MethodName("compareTo", List(ClassRef(cls)), IntRef)
+  }
+
+  trait JSVarArgsFunction extends js.Function {
+    def apply(args: js.Any*): js.Any
+  }
+
+  trait JSVarArgsThisFunction extends js.ThisFunction {
+    def apply(thiz: js.Any, args: js.Any*): js.Any
   }
 }
