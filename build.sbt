@@ -112,6 +112,7 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
 
   // Failure: Throwable is not a proper subclass of js.Error
   "org.scalajs.testsuite.compiler.RuntimeTypeTestsJSTest",
+  "org.scalajs.testsuite.javalib.lang.ThrowableJSTest",
 )
 
 lazy val `scalajs-test-suite` = project
@@ -175,8 +176,17 @@ lazy val `scalajs-test-suite` = project
       Seq(
         base / "test-suite/shared/src/test/scala",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/compiler",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/javalib",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/junit",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/niobuffer",
+        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/scalalib",
         base / "test-suite/js/src/test/scala/org/scalajs/testsuite/utils",
       )
+    },
+
+    Test / sources := {
+      (Test / sources).value
+        .filter(_.getName() != "TimerTest.scala") // requires jsinterop.TimeoutMock
     },
 
     Test / scalacOptions += "-P:scalajs:genStaticForwardersForNonTopLevelObjects",
