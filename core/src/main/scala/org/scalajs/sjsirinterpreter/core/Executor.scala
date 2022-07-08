@@ -536,7 +536,7 @@ class Executor(val classManager: ClassManager) {
     })
 
     val instance = js.Dynamic.newInstance(jsClass)().asInstanceOf[Instance]
-    classManager.superChain(className) { linkedClass =>
+    classManager.forEachAncestor(className) { linkedClass =>
       linkedClass.fields.foreach {
         case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
           instance.setField((linkedClass.className, fieldName), Types.zeroOf(tpe))

@@ -101,12 +101,13 @@ class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Sema
   }
 
   /**
-   * Run callback on a LinkedClass and all its parent classes
-  */
-  def superChain(className: ClassName)(callback: LinkedClass => Unit): Unit = {
+   * Runs the given callback for each of the ancestors of a LinkedClass,
+   * from top (`j.l.Object`) to bottom (the LinkedClass itself).
+   */
+  def forEachAncestor(className: ClassName)(callback: LinkedClass => Unit): Unit = {
     val linkedClass = lookupClassDef(className)
+    linkedClass.superClass.map(_.name).foreach(clazz => forEachAncestor(clazz)(callback))
     callback(linkedClass)
-    linkedClass.superClass.map(_.name).foreach(clazz => superChain(clazz)(callback))
   }
 
   /**
