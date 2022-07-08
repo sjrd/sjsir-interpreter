@@ -219,7 +219,7 @@ class Executor(val classManager: ClassManager) {
       if (instance == null) {
         throwVMException(NullPointerExceptionClass, s"(null: ${receiver.tpe}).${method.name.displayName} at $pos")
       } else if (method.name == toStringMethodName && !instance.isInstanceOf[Instance]) {
-        "" + instance
+        instance.toString()
       } else {
         // SJSIRRepresentiveClass(instance)
         val className: ClassName = (instance: Any) match {

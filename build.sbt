@@ -125,7 +125,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
   "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
   "org.scalajs.testsuite.jsinterop.SpecialTest",
-  "org.scalajs.testsuite.jsinterop.SymbolTest",
 )
 
 lazy val `scalajs-test-suite` = project
