@@ -1021,10 +1021,15 @@ class Executor(val classManager: ClassManager) {
 
   def attachFields(obj: js.Object, linkedClass: LinkedClass)(implicit env: Env) = {
     val fieldContainer = if (linkedClass.fields.exists(_.isInstanceOf[FieldDef])) {
-      val instance = new Instance(ObjectClass)
-      val descriptor = Descriptor.make(false, false, false, instance)
-      Descriptor.ObjectExtensions.defineProperty(obj, fieldsSymbol, descriptor)
-      Some(instance)
+      val existing = obj.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
+      if (js.isUndefined(existing)) {
+        val instance = new Instance(ObjectClass)
+        val descriptor = Descriptor.make(false, false, false, instance)
+        Descriptor.ObjectExtensions.defineProperty(obj, fieldsSymbol, descriptor)
+        Some(instance)
+      } else {
+        Some(existing.asInstanceOf[Instance])
+      }
     } else {
       None
     }
