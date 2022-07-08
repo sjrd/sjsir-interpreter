@@ -115,9 +115,7 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.javalib.lang.ThrowableJSTest",
 
   // Not yet investigated
-  "org.scalajs.testsuite.jsinterop.AsyncTest",
   "org.scalajs.testsuite.jsinterop.ExportsTest",
-  "org.scalajs.testsuite.jsinterop.JSExportStaticTest",
   "org.scalajs.testsuite.jsinterop.JSNativeInPackage",
   "org.scalajs.testsuite.jsinterop.JSSymbolTest",
   "org.scalajs.testsuite.jsinterop.MiscInteropTest",

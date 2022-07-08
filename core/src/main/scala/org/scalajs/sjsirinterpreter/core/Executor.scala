@@ -516,7 +516,7 @@ class Executor(val classManager: ClassManager) {
         case JSFieldDef(flags, name, ftpe) =>
           throw new AssertionError("Trying to init JSField on a Scala class")
       }
-      attachExportedMembers(instance, linkedClass)(Env.empty)
+      attachExportedMembers(instance, staticTarget = null, linkedClass)(Env.empty)
     }
     instance
   }
@@ -878,9 +878,26 @@ class Executor(val classManager: ClassManager) {
 
   /* Generates JSClass value */
   def initJSClass(className: ClassName)(implicit pos: Position): js.Dynamic = {
-    jsClasses.getOrElseUpdate(className, {
-      createJSClass(className, Nil, Env.empty)
-    })
+    jsClasses.get(className) match {
+      case Some(ctor) =>
+        ctor
+
+      case None =>
+        val ctor = createJSClass(className, Nil, Env.empty)
+        jsClasses(className) = ctor
+
+        // Run the class initializer, if any
+        val clinitOpt = classManager.lookupClassDef(className).methods.find { m =>
+          m.value.methodName.isClassInitializer
+        }
+        for (clinit <- clinitOpt) {
+          stack.enter(pos, className, clinit.value.methodName) {
+            eval(clinit.value.body.get)(Env.empty)
+          }
+        }
+
+        ctor
+    }
   }
 
   def createJSClass(className: ClassName, captureValues: List[Tree], topEnv: Env)(
@@ -922,12 +939,30 @@ class Executor(val classManager: ClassManager) {
       postSuperStatements(this, preSuperEnv)
     }
     val ctor = js.constructorOf[Subclass]
-    attachExportedMembers(ctor.prototype, linkedClass)
+    attachExportedMembers(ctor.prototype, ctor, linkedClass)
     ctor
   }
 
-  def attachExportedMembers(targetObject: js.Any, linkedClass: LinkedClass)(implicit env: Env): Unit = {
+  def attachExportedMembers(targetObject: js.Any, staticTarget: js.Any, linkedClass: LinkedClass)(
+      implicit env: Env): Unit = {
     val classNameString = linkedClass.className.nameString
+
+    def targetForFlags(flags: MemberFlags): js.Any =
+      if (flags.namespace.isStatic) staticTarget
+      else targetObject
+
+    if (staticTarget != null) {
+      linkedClass.fields.foreach {
+        case f @ JSFieldDef(flags, name, ftpe) if flags.namespace.isStatic =>
+          implicit val pos = f.pos
+          val fieldName = eval(name)
+          val descriptor = Descriptor.make(true, true, true, Types.zeroOf(ftpe))
+          js.Dynamic.global.Object.defineProperty(staticTarget, fieldName, descriptor)
+
+        case _ =>
+          ()
+      }
+    }
 
     linkedClass.exportedMembers.map(_.value).foreach {
       case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
@@ -939,14 +974,14 @@ class Executor(val classManager: ClassManager) {
 
       case m @ JSMethodDef(flags, name, args, restParam, body) =>
         implicit val pos = m.pos
-        val methodName = eval(name).asInstanceOf[js.Any]
+        val methodName = eval(name)
         val methodBody = createJSThisFunction(classNameString, methodName.toString(), args, restParam, body)
-        targetObject.asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
+        targetForFlags(flags).asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
 
-      case descriptor @ JSPropertyDef(_, name, _, _) =>
+      case descriptor @ JSPropertyDef(flags, name, _, _) =>
         val prop = eval(name)
         val desc = evalPropertyDescriptor(classNameString, prop.toString(), descriptor)
-        js.Dynamic.global.Object.defineProperty(targetObject, prop, desc)
+        js.Dynamic.global.Object.defineProperty(targetForFlags(flags), prop, desc)
     }
   }
 
