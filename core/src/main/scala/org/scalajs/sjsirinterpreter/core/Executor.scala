@@ -216,7 +216,7 @@ class Executor(val classManager: ClassManager) {
 
     case JSSuperSelect(superClass, receiver, item) =>
       val clazz = eval(superClass).asInstanceOf[js.Dynamic]
-      val propName = eval(item).asInstanceOf[String]
+      val propName = eval(item)
       val propDesc = Descriptor.resolve(clazz, propName)
         .getOrThrow(s"Cannot resolve super property $propName on $clazz")
       if (propDesc.get.isDefined) {
@@ -614,7 +614,7 @@ class Executor(val classManager: ClassManager) {
 
     case JSSuperSelect(superClass, receiver, item) =>
       val clazz = eval(superClass).asInstanceOf[js.Dynamic]
-      val propName = eval(item).asInstanceOf[String]
+      val propName = eval(item)
       val propDesc = Descriptor.resolve(clazz, propName)
         .getOrThrow(s"Cannot resolve super property $propName on $clazz")
       if (propDesc.set.isDefined)
@@ -1024,9 +1024,9 @@ class Executor(val classManager: ClassManager) {
 
     linkedClass.fields.foreach {
       case JSFieldDef(flags, name, tpe) =>
-        val field = eval(name).asInstanceOf[String]
+        val field = eval(name)
         val descriptor = Descriptor.make(true, true, true, Types.zeroOf(tpe))
-        js.Object.defineProperty(obj, field, descriptor)
+        js.Dynamic.global.Object.defineProperty(obj, field, descriptor)
       case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
         fieldContainer.foreach(_.setField((linkedClass.className, fieldName), Types.zeroOf(tpe)))
       case smth =>

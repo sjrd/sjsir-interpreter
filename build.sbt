@@ -116,7 +116,6 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
 
   // Not yet investigated
   "org.scalajs.testsuite.jsinterop.ExportsTest",
-  "org.scalajs.testsuite.jsinterop.JSSymbolTest",
   "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
   "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
 )
