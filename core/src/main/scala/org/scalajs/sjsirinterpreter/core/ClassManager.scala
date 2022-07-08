@@ -14,10 +14,13 @@ import org.scalajs.ir.ClassKind.Interface
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 import org.scalajs.sjsirinterpreter.core.values._
 
-class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Semantics) {
+class ClassManager(val semantics: Semantics, val modules: List[ModuleSet.Module]) {
+  val classes = modules.flatMap(_.classDefs).map(c => (c.name.name, c)).toMap
+
   val staticFields: mutable.Map[(ClassName, FieldName), js.Any] = mutable.Map()
+  val staticFieldMirrors: mutable.Map[(ClassName, FieldName), List[String]] = mutable.Map()
   val classInstances: mutable.Map[TypeRef, Instance] = mutable.Map()
-  val modules: mutable.Map[ClassName, Instance] = mutable.Map()
+  val moduleClassInstances: mutable.Map[ClassName, Instance] = mutable.Map()
   val memberCache: mutable.Map[ClassName, Set[ClassName]] = mutable.Map()
   val methodCache: mutable.Map[(ClassName, MethodName, MemberNamespace), (ClassName, MethodDef)] = mutable.Map()
 
@@ -81,10 +84,10 @@ class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Sema
   }
 
   def loadModule(className: ClassName, orElse: => Instance): Instance =
-    modules.getOrElseUpdate(className, orElse)
+    moduleClassInstances.getOrElseUpdate(className, orElse)
 
   def storeModule(className: ClassName, instance: Instance) =
-    modules.update(className, instance)
+    moduleClassInstances.update(className, instance)
 
   def lookupClassInstance(typeRef: TypeRef, orElse: => Instance): Instance =
     classInstances.getOrElseUpdate(typeRef, orElse)
@@ -92,12 +95,17 @@ class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Sema
   def getStaticField(key: (ClassName, FieldName)): js.Any =
     staticFields.get(key).getOrThrow(s"Static field ${key._2} on ${key._1} not found")
 
-  def setStaticField(key: (ClassName, FieldName), value: js.Any) = {
+  def registerStaticFieldMirror(key: (ClassName, FieldName), mirror: String): Unit =
+    staticFieldMirrors(key) = mirror :: staticFieldMirrors.getOrElse(key, Nil)
+
+  def setStaticField(key: (ClassName, FieldName), value: js.Any): Unit = {
     assert(
       staticFields.contains(key),
       s"Static field ${key._2} on ${key._1} not found (for assignment)"
     )
     staticFields.update(key, value)
+    for (mirror <- staticFieldMirrors.getOrElse(key, Nil))
+      Executor.setJSGlobalRef(mirror, value)
   }
 
   /**
@@ -133,10 +141,9 @@ class ClassManager(val classes: Map[ClassName, LinkedClass], val semantics: Sema
 
 object ClassManager {
   def fromModuleSet(moduleSet: ModuleSet): ClassManager = {
-    val classes = moduleSet.modules.flatMap(_.classDefs).map(c => (c.name.name, c)).toMap
-    new ClassManager(classes, moduleSet.coreSpec.semantics)
+    new ClassManager(moduleSet.coreSpec.semantics, moduleSet.modules)
   }
 
   def empty: ClassManager =
-    new ClassManager(Map(), Semantics.Defaults)
+    new ClassManager(Semantics.Defaults, Nil)
 }

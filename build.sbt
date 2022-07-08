@@ -114,7 +114,7 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   "org.scalajs.testsuite.compiler.RuntimeTypeTestsJSTest",
   "org.scalajs.testsuite.javalib.lang.ThrowableJSTest",
 
-  // Not yet investigated
+  // One test demands that we create top-level let's, not var's, and we cannot do that
   "org.scalajs.testsuite.jsinterop.ExportsTest",
 )
 

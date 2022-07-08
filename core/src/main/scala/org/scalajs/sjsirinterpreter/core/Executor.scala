@@ -95,7 +95,21 @@ class Executor(val classManager: ClassManager) {
 
   private val stack = new Stack()
 
+  createTopLevelExportDefinitions()
   runStaticInitializers()
+  runTopLevelExports()
+
+  private def createTopLevelExportDefinitions(): Unit = {
+    val topLevelVars = classManager.modules
+      .flatMap(_.topLevelExports)
+      .map(_.exportName)
+
+    if (topLevelVars.nonEmpty) {
+      // We have to use 'var' in sloppy mode to be able to create something at the top-level
+      val declarerScript = topLevelVars.mkString("var ", ",", ";\n")
+      js.eval(declarerScript)
+    }
+  }
 
   private def runStaticInitializers(): Unit = {
     val staticInits = for {
@@ -115,6 +129,34 @@ class Executor(val classManager: ClassManager) {
     for ((cls, methodDef) <- sortedInits) {
       assert(methodDef.args.isEmpty, s"static initializer for ${cls.nameString} has arguments ${methodDef.args}")
       execute(methodDef.body.get)
+    }
+  }
+
+  private def runTopLevelExports(): Unit = {
+    for {
+      module <- classManager.modules
+      topLevelExport <- module.topLevelExports
+    } {
+      val className = topLevelExport.owningClass
+      val tree = topLevelExport.tree
+
+      val exportName = tree.topLevelExportName
+      implicit val pos = tree.pos
+
+      stack.enter(pos, className, "<top-level exports>") {
+        val value = tree match {
+          case TopLevelJSClassExportDef(_, _) =>
+            loadJSConstructor(className)
+          case TopLevelModuleExportDef(_, _) =>
+            loadModuleGeneric(className)
+          case TopLevelMethodExportDef(_, JSMethodDef(flags, _, args, restParam, body)) =>
+            createJSThisFunction(className.nameString, exportName, args, restParam, body)(Env.empty, pos)
+          case TopLevelFieldExportDef(_, _, FieldIdent(fieldName)) =>
+            classManager.registerStaticFieldMirror((className, fieldName), exportName)
+            classManager.getStaticField((className, fieldName))
+        }
+        setJSGlobalRef(exportName, value)
+      }
     }
   }
 
@@ -282,11 +324,7 @@ class Executor(val classManager: ClassManager) {
 
     case LoadModule(name) =>
       implicit val pos = program.pos
-      classManager.loadModule(name, {
-        stack.enter(pos, name, ClassInitializerName) {
-          eval(New(name, MethodIdent(NoArgConstructorName), List())).asInstanceOf[Instance]
-        }
-      })
+      loadModule(name)
 
     case StoreModule(name, tree) =>
       classManager.storeModule(name, eval(tree).asInstanceOf[Instance])
@@ -634,10 +672,7 @@ class Executor(val classManager: ClassManager) {
       classManager.setStaticField((className, fieldName), value)
 
     case JSGlobalRef(name) =>
-      val argName = if (name == "value") "x" else "value"
-      val fun = new js.Function(argName, s"""$name = $argName;""").asInstanceOf[js.Function1[js.Any, Unit]]
-      fun(value)
-      ()
+      setJSGlobalRef(name, value)
 
     case RecordSelect(record, field) =>
       throw new AssertionError(s"unexpected RecordSelect at ${selector.pos}")
@@ -686,6 +721,22 @@ class Executor(val classManager: ClassManager) {
       get = desc.getterBody.map(createJSPropGetter(className, propNameString, _)).orUndefined
       set = desc.setterArgAndBody.map(createJSPropSetter(className, propNameString, _)).orUndefined
     }
+  }
+
+  def loadModuleGeneric(className: ClassName)(implicit pos: Position): js.Any = {
+    val classDef = classManager.lookupClassDef(className)
+    classDef.kind match {
+      case ModuleClass => loadModule(className)
+      case _           => loadJSModule(className)
+    }
+  }
+
+  def loadModule(className: ClassName)(implicit pos: Position): js.Any = {
+    classManager.loadModule(className, {
+      stack.enter(pos, className, ClassInitializerName) {
+        eval(New(className, MethodIdent(NoArgConstructorName), List()))(Env.empty).asInstanceOf[Instance]
+      }
+    })
   }
 
   def loadJSModule(className: ClassName)(implicit pos: Position): js.Any = {
@@ -1100,5 +1151,11 @@ object Executor {
 
   trait JSVarArgsThisFunction extends js.ThisFunction {
     def apply(thiz: js.Any, args: js.Any*): js.Any
+  }
+
+  def setJSGlobalRef(name: String, value: js.Any): Unit = {
+    val argName = if (name == "value") "x" else "value"
+    val fun = new js.Function(argName, s"""$name = $argName;""").asInstanceOf[js.Function1[js.Any, Unit]]
+    fun(value)
   }
 }
