@@ -1,0 +1,202 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Test Core
+        run: sbt sjsir-interpreter/test
+      - name: Run CLI
+        run: sbt sjsir-interpreter-cli/run
+      - name: Link Browser
+        run: sbt sjsir-interpreter-browser/fastOptJS
+
+  scalajs-test-suite-compiler:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.compiler.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.compiler.*'
+
+  scalajs-test-suite-javalib:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.javalib.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.javalib.*'
+
+  scalajs-test-suite-jsinterop:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.jsinterop.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.jsinterop.*'
+
+  scalajs-test-suite-junit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.junit.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.junit.*'
+
+  scalajs-test-suite-library:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.library.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.library.*'
+
+  scalajs-test-suite-niobuffer:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.niobuffer.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.niobuffer.*'
+
+  scalajs-test-suite-niocharset:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.niocharset.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.niocharset.*'
+
+  scalajs-test-suite-scalalib:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.scalalib.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.scalalib.*'
+
+  scalajs-test-suite-typedarray:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+      - name: Setup Node.js v14 LTS
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+      - name: npm install
+        run: npm install
+      - name: Scala.js test suite - org.scalajs.testsuite.typedarray.*
+        run: sbt 'scalajs-test-suite/testOnly org.scalajs.testsuite.typedarray.*'
