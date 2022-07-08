@@ -23,11 +23,19 @@ final class Stack {
   import Stack._
 
   val elements = js.Array[Element]()
-  var currentClassName: ClassName = null
-  var currentMethodName: MethodName = null
+  var currentClassName: String = null
+  var currentMethodName: String = null
 
   @inline
-  def enter[A](callSitePos: Position, className: ClassName, methodName: MethodName)(body: => A): A = {
+  def enter[A](callSitePos: Position, className: ClassName, methodName: MethodName)(body: => A): A =
+    enter(callSitePos, className.nameString, methodName.simpleName.nameString)(body)
+
+  @inline
+  def enter[A](callSitePos: Position, className: ClassName, methodName: String)(body: => A): A =
+    enter(callSitePos, className.nameString, methodName)(body)
+
+  @inline
+  def enter[A](callSitePos: Position, className: String, methodName: String)(body: => A): A = {
     val prevClassName = currentClassName
     val prevMethodName = currentMethodName
     elements.push(new Element(prevClassName, prevMethodName, callSitePos))
@@ -44,7 +52,7 @@ final class Stack {
 
   @inline
   def enterJSCode[A](callSitePos: Position)(body: => A): A =
-    enter(callSitePos, null, null)(body)
+    enter(callSitePos, "<jscode>", "<jscode>")(body)
 
   def captureStackTrace(pos: Position): List[Element] = {
     var result: List[Element] = Nil
@@ -56,7 +64,7 @@ final class Stack {
 }
 
 object Stack {
-  final class Element(val className: ClassName, val methodName: MethodName, val pos: Position)
+  final class Element(val className: String, val methodName: String, val pos: Position)
 }
 
 /**
@@ -113,8 +121,8 @@ class Executor(val classManager: ClassManager) {
       val stackTrace = stack.captureStackTrace(pos)
       val stackTraceElements = stackTrace.map { e =>
         val args = List(
-          if (e.className == null) Null() else StringLiteral(e.className.nameString),
-          if (e.methodName == null) Null() else StringLiteral(e.methodName.simpleName.nameString),
+          if (e.className == null) StringLiteral("<jscode>") else StringLiteral(e.className),
+          if (e.methodName == null) StringLiteral("<jscode>") else StringLiteral(e.methodName),
           if (e.pos.isEmpty) Null() else StringLiteral(e.pos.source.toASCIIString()),
           if (e.pos.isEmpty) IntLiteral(-1) else IntLiteral(e.pos.line),
         )
@@ -262,7 +270,9 @@ class Executor(val classManager: ClassManager) {
     case LoadModule(name) =>
       implicit val pos = program.pos
       classManager.loadModule(name, {
-        eval(New(name, MethodIdent(NoArgConstructorName), List())).asInstanceOf[Instance]
+        stack.enter(pos, name, ClassInitializerName) {
+          eval(New(name, MethodIdent(NoArgConstructorName), List())).asInstanceOf[Instance]
+        }
       })
 
     case StoreModule(name, tree) =>
@@ -320,11 +330,13 @@ class Executor(val classManager: ClassManager) {
     case Debugger() =>
       throw new AssertionError("Trying to debug undebuggable? :)")
 
-    case Closure(true, captureParams, params, restParam, body, captureValues) =>
-      evalJsClosure(params, restParam, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
-
-    case Closure(false, captureParams, params, restParam, body, captureValues) =>
-      evalJsFunction(params, restParam, body)(Env.empty.bind(evalArgs(captureParams, captureValues)))
+    case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
+      val capturesEnv = Env.empty.bind(evalArgs(captureParams, captureValues))
+      val pos = program.pos
+      if (arrow)
+        createJSArrowFunction(stack.currentClassName, "<jscode>", params, restParam, body)(capturesEnv, pos)
+      else
+        createJSThisFunction(stack.currentClassName, "<jscode>", params, restParam, body)(capturesEnv, pos)
 
     case JSObjectConstr(props) =>
       val inits = props.map {
@@ -604,30 +616,44 @@ class Executor(val classManager: ClassManager) {
       throw new AssertionError(s"unexpected RecordSelect at ${selector.pos}")
   }
 
-  def evalJsFunction(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
+  def createJSThisFunction(className: String, methodName: String,
+      params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(
+      implicit env: Env, pos: Position): js.Any = {
     { (thizz, args) =>
-      val argsMap = bindJSArgs(params, restParam, args.toSeq)
-      eval(body)(env.bind(argsMap).setThis(thizz))
+      stack.enter(pos, className, methodName) {
+        val argsMap = bindJSArgs(params, restParam, args.toSeq)
+        eval(body)(env.bind(argsMap).setThis(thizz))
+      }
     }: JSVarArgsThisFunction
   }
 
-  def evalJsClosure(params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(implicit env: Env): js.Any = {
+  def createJSArrowFunction(className: String, methodName: String,
+      params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(
+      implicit env: Env, pos: Position): js.Any = {
     { (args) =>
-      val argsMap = bindJSArgs(params, restParam, args.toSeq)
-      eval(body)(env.bind(argsMap))
+      stack.enter(pos, className, methodName) {
+        val argsMap = bindJSArgs(params, restParam, args.toSeq)
+        eval(body)(env.bind(argsMap))
+      }
     }: JSVarArgsFunction
   }
 
-  def evalGetter(t: Tree)(implicit env: Env): js.ThisFunction0[js.Any, js.Any] =
-    (thiz) => eval(t)(env.setThis(thiz))
+  def evalGetter(className: String, propNameString: String, t: Tree)(
+      implicit env: Env, pos: Position): js.Any = {
+    createJSThisFunction(className, propNameString, Nil, None, t)
+  }
 
-  def evalSetter(t: (ParamDef, Tree))(implicit env: Env): js.ThisFunction1[js.Any, js.Any, js.Any] =
-    (thiz, arg) => eval(t._2)(env.bind(t._1.name.name, arg).setThis(thiz))
+  def evalSetter(className: String, propNameString: String, t: (ParamDef, Tree))(
+      implicit env: Env, pos: Position): js.Any = {
+    createJSThisFunction(className, propNameString, List(t._1), None, t._2)
+  }
 
-  def evalPropertyDescriptor(desc: JSPropertyDef)(implicit env: Env): js.PropertyDescriptor = {
+  def evalPropertyDescriptor(className: String, propNameString: String, desc: JSPropertyDef)(
+      implicit env: Env): js.PropertyDescriptor = {
+    implicit val pos = desc.pos
     js.Dynamic.literal(
-      get = desc.getterBody.map(evalGetter).getOrElse(js.undefined),
-      set = desc.setterArgAndBody.map(evalSetter).getOrElse(js.undefined)
+      get = desc.getterBody.map(evalGetter(className, propNameString, _)).getOrElse(js.undefined),
+      set = desc.setterArgAndBody.map(evalSetter(className, propNameString, _)).getOrElse(js.undefined)
     ).asInstanceOf[js.PropertyDescriptor]
   }
 
@@ -901,6 +927,8 @@ class Executor(val classManager: ClassManager) {
   }
 
   def attachExportedMembers(targetObject: js.Any, linkedClass: LinkedClass)(implicit env: Env): Unit = {
+    val classNameString = linkedClass.className.nameString
+
     linkedClass.exportedMembers.map(_.value).foreach {
       case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
           if flags.namespace == MemberNamespace.Public && linkedClass.kind.isJSClass =>
@@ -909,14 +937,15 @@ class Executor(val classManager: ClassManager) {
          */
         ()
 
-      case JSMethodDef(flags, name, args, restParam, body) =>
+      case m @ JSMethodDef(flags, name, args, restParam, body) =>
+        implicit val pos = m.pos
         val methodName = eval(name).asInstanceOf[js.Any]
-        val methodBody = evalJsFunction(args, restParam, body)
+        val methodBody = createJSThisFunction(classNameString, methodName.toString(), args, restParam, body)
         targetObject.asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
 
       case descriptor @ JSPropertyDef(_, name, _, _) =>
         val prop = eval(name)
-        val desc = evalPropertyDescriptor(descriptor)
+        val desc = evalPropertyDescriptor(classNameString, prop.toString(), descriptor)
         js.Dynamic.global.Object.defineProperty(targetObject, prop, desc)
     }
   }
