@@ -374,6 +374,16 @@ class Executor(val classManager: ClassManager) {
         obj.jsMethodApply(meth)(eargs: _*)
       }
 
+    case JSSuperMethodCall(superClass, receiver, method, args) =>
+      val eclass = eval(superClass).asInstanceOf[js.Dynamic]
+      val meth = eval(method)
+      val methodFun = eclass.prototype.asInstanceOf[RawJSValue].jsPropertyGet(meth)
+      val obj = eval(receiver)
+      val eargs = evalSpread(args)
+      stack.enterJSCode(program.pos) {
+        methodFun.asInstanceOf[js.Function].call(obj, eargs: _*)
+      }
+
     case JSGlobalRef(name) =>
       js.eval(name).asInstanceOf[js.Any]
 
@@ -401,9 +411,6 @@ class Executor(val classManager: ClassManager) {
     case CreateJSClass(className, captureValues) =>
       implicit val pos = program.pos
       createJSClass(className, captureValues, env)
-
-    case JSSuperMethodCall(_, _, _, _) =>
-      unimplemented(program, "eval")
 
     case JSSuperConstructorCall(_) =>
       throw new AssertionError("JSSuperConstructorCall should never be called in eval loop")
