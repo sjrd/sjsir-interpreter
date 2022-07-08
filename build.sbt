@@ -113,6 +113,19 @@ val ignoredScalaJSTestClasses: Set[String] = Set(
   // Failure: Throwable is not a proper subclass of js.Error
   "org.scalajs.testsuite.compiler.RuntimeTypeTestsJSTest",
   "org.scalajs.testsuite.javalib.lang.ThrowableJSTest",
+
+  // Not yet investigated
+  "org.scalajs.testsuite.jsinterop.AsyncTest",
+  "org.scalajs.testsuite.jsinterop.ExportsTest",
+  "org.scalajs.testsuite.jsinterop.JSExportStaticTest",
+  "org.scalajs.testsuite.jsinterop.JSNativeInPackage",
+  "org.scalajs.testsuite.jsinterop.JSSymbolTest",
+  "org.scalajs.testsuite.jsinterop.MiscInteropTest",
+  "org.scalajs.testsuite.jsinterop.ModulesWithGlobalFallbackTest",
+  "org.scalajs.testsuite.jsinterop.NestedJSClassTest",
+  "org.scalajs.testsuite.jsinterop.NonNativeJSTypeTest",
+  "org.scalajs.testsuite.jsinterop.SpecialTest",
+  "org.scalajs.testsuite.jsinterop.SymbolTest",
 )
 
 lazy val `scalajs-test-suite` = project
@@ -175,20 +188,13 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/compiler",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/javalib",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/junit",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/library",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/niobuffer",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/scalalib",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/typedarray",
-        base / "test-suite/js/src/test/scala/org/scalajs/testsuite/utils",
+        base / "test-suite/js/src/test/require-no-modules",
+        base / "test-suite/js/src/test/scala",
       )
     },
 
     Test / sources := {
       (Test / sources).value
-        .filter(_.getName() != "TimerTest.scala") // requires jsinterop.TimeoutMock
         .filter(_.getName() != "UnionTypeTest.scala") // requires typechecking macros
     },
 
