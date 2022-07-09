@@ -236,11 +236,16 @@ class Executor(val classManager: ClassManager) {
     case JSLinkingInfo() =>
       linkingInfo
 
-    case Select(tree, className, field) => eval(tree) match {
-      case Instance(instance) =>
-        instance.getField((className, field.name))
-      case rest => unimplemented(rest, "Select")
-    }
+    case Select(qualifier, className, field) =>
+      implicit val pos = program.pos
+      eval(qualifier) match {
+        case Instance(instance) =>
+          instance.getField((className, field.name))
+        case null =>
+          throwVMException(NullPointerExceptionClass, s"(null: ${qualifier.tpe}).${field.name.nameString} at $pos")
+        case rest =>
+          throw new AssertionError(s"Unexpected value $qualifier in Select node at $pos")
+      }
 
     case SelectStatic(className, FieldIdent(fieldName)) =>
       classManager.getStaticField((className, fieldName))
