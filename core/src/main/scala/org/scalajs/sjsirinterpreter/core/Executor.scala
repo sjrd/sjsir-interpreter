@@ -237,7 +237,7 @@ class Executor(val classManager: ClassManager) {
       linkingInfo
 
     case Select(tree, className, field) => eval(tree) match {
-      case instance: Instance =>
+      case Instance(instance) =>
         instance.getField((className, field.name))
       case rest => unimplemented(rest, "Select")
     }
@@ -262,8 +262,10 @@ class Executor(val classManager: ClassManager) {
 
     case JSPrivateSelect(qualifier, className, field) =>
       val obj = eval(qualifier).asInstanceOf[RawJSValue]
-      val fields = obj.jsPropertyGet(fieldsSymbol).asInstanceOf[Instance]
-      fields.getField((className, field.name))
+      val fields = obj.jsPropertyGet(fieldsSymbol).asInstanceOf[Instance.Fields]
+      fields.getOrElse((className, field.name), {
+        throw js.JavaScriptException(new js.TypeError(s"Cannot find field $className::${field.name}"))
+      })
 
     case JSSuperSelect(superClass, receiver, item) =>
       val clazz = eval(superClass).asInstanceOf[js.Dynamic]
@@ -281,12 +283,12 @@ class Executor(val classManager: ClassManager) {
       val instance = eval(receiver)
       if (instance == null) {
         throwVMException(NullPointerExceptionClass, s"(null: ${receiver.tpe}).${method.name.displayName} at $pos")
-      } else if (method.name == toStringMethodName && !instance.isInstanceOf[Instance]) {
+      } else if (method.name == toStringMethodName && !Instance.is(instance)) {
         instance.toString()
       } else {
         // SJSIRRepresentiveClass(instance)
         val className: ClassName = (instance: Any) match {
-          case instance: Instance => instance.className
+          case Instance(instance) => instance.className
           case _: Boolean         => BoxedBooleanClass
           case _: CharInstance    => BoxedCharacterClass
           case _: Double          => BoxedDoubleClass // All `number`s use java.lang.Double, by spec
@@ -492,7 +494,7 @@ class Executor(val classManager: ClassManager) {
 
     case GetClass(e) =>
       (eval(e): Any) match {
-        case instance: Instance   => getClassOf(ClassRef(instance.className))
+        case Instance(instance)   => getClassOf(ClassRef(instance.className))
         case array: ArrayInstance => getClassOf(array.typeRef)
         case _: LongInstance      => getClassOf(ClassRef(BoxedLongClass))
         case _: CharInstance      => getClassOf(ClassRef(BoxedCharacterClass))
@@ -511,7 +513,7 @@ class Executor(val classManager: ClassManager) {
       implicit val pos = program.pos
       val value = eval(expr)
       value match {
-        case value: Instance =>
+        case Instance(value) =>
           val result = createNewInstance(value.className)
           result.fields ++= value.fields
           result
@@ -575,8 +577,8 @@ class Executor(val classManager: ClassManager) {
 
   private def createNewInstance(className: ClassName)(implicit pos: Position): Instance = {
     val jsClass = jsClasses.getOrElseUpdate(className, {
-      class SpecificClass extends Instance(className)
-      val ctor = js.constructorOf[SpecificClass]
+      val isThrowable = classManager.lookupClassDef(className).ancestors.contains(ThrowableClass)
+      val ctor = Instance.newInstanceClass(className, isThrowable)
       setFunctionName(ctor, className.nameString)
       ctor
     })
@@ -663,8 +665,8 @@ class Executor(val classManager: ClassManager) {
 
     case JSPrivateSelect(qualifier, className, field) =>
       val obj = eval(qualifier).asInstanceOf[RawJSValue]
-      val fields = obj.jsPropertyGet(fieldsSymbol).asInstanceOf[Instance]
-      fields.setField((className, field.name), value)
+      val fields = obj.jsPropertyGet(fieldsSymbol).asInstanceOf[Instance.Fields]
+      fields((className, field.name)) = value
 
     case JSSuperSelect(superClass, receiver, item) =>
       val clazz = eval(superClass).asInstanceOf[js.Dynamic]
@@ -816,7 +818,7 @@ class Executor(val classManager: ClassManager) {
       LongType <:< t
     case _: CharInstance =>
       CharType <:< t
-    case value: Instance =>
+    case Instance(value) =>
       ClassType(value.className) <:< t
     case array: ArrayInstance =>
       ArrayType(array.typeRef) <:< t
@@ -1084,18 +1086,18 @@ class Executor(val classManager: ClassManager) {
   }
 
   def attachFields(obj: js.Object, linkedClass: LinkedClass)(implicit env: Env) = {
-    val fieldContainer = if (linkedClass.fields.exists(_.isInstanceOf[FieldDef])) {
+    val fields: Instance.Fields = if (linkedClass.fields.exists(_.isInstanceOf[FieldDef])) {
       val existing = obj.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
       if (js.isUndefined(existing)) {
-        val instance = new Instance(ObjectClass)
-        val descriptor = Descriptor.make(false, false, false, instance)
+        val fields: Instance.Fields = mutable.Map.empty
+        val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
         Descriptor.ObjectExtensions.defineProperty(obj, fieldsSymbol, descriptor)
-        Some(instance)
+        fields
       } else {
-        Some(existing.asInstanceOf[Instance])
+        existing.asInstanceOf[Instance.Fields]
       }
     } else {
-      None
+      null
     }
 
     linkedClass.fields.foreach {
@@ -1104,7 +1106,7 @@ class Executor(val classManager: ClassManager) {
         val descriptor = Descriptor.make(true, true, true, Types.zeroOf(tpe))
         js.Dynamic.global.Object.defineProperty(obj, field, descriptor)
       case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
-        fieldContainer.foreach(_.setField((linkedClass.className, fieldName), Types.zeroOf(tpe)))
+        fields.update((linkedClass.className, fieldName), Types.zeroOf(tpe))
       case smth =>
         throw new Exception(s"Unexpected kind of field: $smth")
     }
