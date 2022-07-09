@@ -175,8 +175,12 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala",
+        base / "test-suite/js/src/test/require-2.12",
         base / "test-suite/js/src/test/require-no-modules",
+        base / "test-suite/js/src/test/require-sam",
+        base / "test-suite/js/src/test/require-scala2",
         base / "test-suite/js/src/test/scala",
+        base / "test-suite/js/src/test/scala-new-collections",
       )
     },
 
