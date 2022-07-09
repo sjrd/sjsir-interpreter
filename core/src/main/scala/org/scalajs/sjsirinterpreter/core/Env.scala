@@ -6,42 +6,45 @@ import org.scalajs.ir.Names.LocalName
 import utils.Utils.OptionsOps
 
 // class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any]) extends js.Object {
-class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any]) {
+class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any], newTarget: Option[js.Any]) {
 
   /** Augments the environment with a variable binding: returns new Env */
-  def bind(name: LocalName, value: js.Any) = {
-    new Env(table + (name -> new EnvVar(value)), ths)
-  }
+  def bind(name: LocalName, value: js.Any): Env =
+    new Env(table + (name -> new EnvVar(value)), ths, newTarget)
 
-  def bind(bindings: Map[LocalName, js.Any]) = {
-    new Env(table ++ bindings.mapValues(new EnvVar(_)), ths)
-  }
+  def bind(bindings: Map[LocalName, js.Any]): Env =
+    new Env(table ++ bindings.mapValues(new EnvVar(_)), ths, newTarget)
 
   /** Updates variable value */
-  def set(name: LocalName, value: js.Any) {
+  def set(name: LocalName, value: js.Any): Unit =
     lookup(name).update(value)
-  }
 
   /** Reads variable value */
-  def get(name: LocalName): js.Any = {
+  def get(name: LocalName): js.Any =
     lookup(name).value
-  }
 
   def setThis(instance: Option[js.Any]): Env =
-    new Env(table, instance)
+    new Env(table, instance, newTarget)
 
-  def setThis(instance: js.Any) = {
-    new Env(table, Some(instance))
-  }
+  def setThis(instance: js.Any): Env =
+    setThis(Some(instance))
 
-  def getThis: js.Any = ths.getOrThrow("No THIS in current Env")
+  def getThis: js.Any =
+    ths.getOrThrow("No THIS in current Env")
 
-  override def toString(): String = table.toString()
+  def setNewTarget(target: js.Any): Env =
+    new Env(table, ths, Some(target))
 
-  private
-  def lookup(name: LocalName): EnvVar = table.get(name).getOrThrow(s"No variable $name in Env")
+  def getNewTarget: js.Any =
+    newTarget.getOrThrow("No `new.target` in the current Env")
+
+  override def toString(): String =
+    table.toString()
+
+  private def lookup(name: LocalName): EnvVar =
+    table.get(name).getOrThrow(s"No variable $name in Env")
 }
 
 object Env {
-  def empty = new Env(Map(), None)
+  def empty = new Env(Map(), None, None)
 }

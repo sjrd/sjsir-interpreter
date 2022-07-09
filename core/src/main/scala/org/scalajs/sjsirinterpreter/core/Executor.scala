@@ -469,7 +469,7 @@ class Executor(val classManager: ClassManager) {
       unimplemented(program, "eval")
 
     case JSNewTarget() =>
-      unimplemented(program, "eval")
+      env.getNewTarget
 
     case NewArray(typeRef, lengths) =>
       ArrayInstance.createWithDimensions(typeRef, lengths.map(l => Types.asInt(eval(l))))
@@ -1013,9 +1013,9 @@ class Executor(val classManager: ClassManager) {
 
     val parents = js.Dynamic.literal(ParentClass = superClass).asInstanceOf[RawParents]
 
-    def preSuperStatements(args: Seq[js.Any]): Env = {
+    def preSuperStatements(newTarget: js.Any, args: Seq[js.Any]): Env = {
       val argsMap = bindJSArgs(ctorDef.args, ctorDef.restParam, args)
-      evalStmts(preludeTree)(env.bind(argsMap))._2
+      evalStmts(preludeTree)(env.setNewTarget(newTarget).bind(argsMap))._2
     }
 
     def evalSuperArgs(env: Env): Seq[js.Any] =
@@ -1027,7 +1027,7 @@ class Executor(val classManager: ClassManager) {
     }
 
     class Subclass(preSuperEnv: Env) extends parents.ParentClass(evalSuperArgs(preSuperEnv): _*) {
-      def this(args: js.Any*) = this(preSuperStatements(args))
+      def this(args: js.Any*) = this(preSuperStatements(js.`new`.target, args))
       postSuperStatements(this, preSuperEnv)
     }
     val ctor = js.constructorOf[Subclass]

@@ -176,6 +176,7 @@ lazy val `scalajs-test-suite` = project
       Seq(
         base / "test-suite/shared/src/test/scala",
         base / "test-suite/js/src/test/require-2.12",
+        base / "test-suite/js/src/test/require-new-target",
         base / "test-suite/js/src/test/require-no-modules",
         base / "test-suite/js/src/test/require-sam",
         base / "test-suite/js/src/test/require-scala2",
