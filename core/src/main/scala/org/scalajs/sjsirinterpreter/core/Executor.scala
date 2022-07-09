@@ -21,19 +21,15 @@ import org.scalajs.sjsirinterpreter.core.values._
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 import Types.TypeOps
+import org.scalajs.linker.interface.ModuleInitializer
 
-/**
-  * Executor is an object performing the evaluation
-  * and maintaining the global state of the program.
-  *
-  * @param classManager - an instance of ClassManager
-  */
-class Executor(val classManager: ClassManager) {
+/** Main execution engine */
+final class Executor(val interpreter: Interpreter) {
   import Executor._
 
-  val jsClasses: mutable.Map[ClassName, js.Dynamic] = mutable.Map()
-  val jsModules: mutable.Map[ClassName, js.Any] = mutable.Map()
-  implicit val isSubclass = classManager.isSubclassOf(_, _)
+  implicit def isSubclass(subclass: ClassName, superclass: ClassName)(implicit pos: Position): Boolean =
+    interpreter.getClassInfo(subclass).isSubclass(interpreter.getClassInfo(superclass))
+
   val fieldsSymbol = js.Symbol("fields")
 
   val linkingInfo: js.Object = {
@@ -48,96 +44,65 @@ class Executor(val classManager: ClassManager) {
 
   private val stack = new Stack()
 
-  createTopLevelExportDefinitions()
-  runStaticInitializers()
-  runTopLevelExports()
-  runModuleInitializers()
-
-  private def createTopLevelExportDefinitions(): Unit = {
-    val topLevelVars = classManager.modules
-      .flatMap(_.topLevelExports)
-      .map(_.exportName)
-
-    if (topLevelVars.nonEmpty) {
-      if (js.typeOf(js.Dynamic.global.require) == "function") {
-        // If we have `require`, we cheat to be able to create true 'let's
-        val vm = js.Dynamic.global.require("vm")
-        val declarerScript = topLevelVars.mkString("let ", ",", ";\n")
-        val script = js.Dynamic.newInstance(vm.Script)(declarerScript)
-        script.runInThisContext()
-      } else {
-        // We have to use 'var' in sloppy mode to be able to create something at the top-level
-        val declarerScript = topLevelVars.mkString("var ", ",", ";\n")
-        js.eval(declarerScript)
+  def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
+    for (classInfo <- classInfos) {
+      for (methodDef <- classInfo.maybeLookupStaticConstructor(StaticInitializerName)) {
+        stack.enter(NoPosition, classInfo.className, StaticInitializerName) {
+          assert(methodDef.args.isEmpty, s"static initializer for $classInfo has arguments ${methodDef.args}")
+          execute(methodDef.body.get)
+        }
       }
     }
   }
 
-  private def runStaticInitializers(): Unit = {
-    val staticInits = for {
-      (cls, linkedClass) <- classManager.classes.toList
-      staticInit <- linkedClass.methods.find { m =>
-        val methodDef = m.value
-        methodDef.flags.namespace == MemberNamespace.StaticConstructor &&
-        methodDef.methodName.isStaticInitializer
-      }
-    } yield {
-      cls -> staticInit.value
-    }
-
-    // Sort for determinism
-    val sortedInits = staticInits.sortBy(_._1)
-
-    for ((cls, methodDef) <- sortedInits) {
-      assert(methodDef.args.isEmpty, s"static initializer for ${cls.nameString} has arguments ${methodDef.args}")
-      execute(methodDef.body.get)
-    }
-  }
-
-  private def runTopLevelExports(): Unit = {
+  def initializeTopLevelExports(classInfos: List[ClassInfo]): Unit = {
     for {
-      module <- classManager.modules
-      topLevelExport <- module.topLevelExports
+      classInfo <- classInfos
+      topLevelExport <- classInfo.classDef.topLevelExportDefs
     } {
-      val className = topLevelExport.owningClass
-      val tree = topLevelExport.tree
+      val className = classInfo.className
 
-      val exportName = tree.topLevelExportName
-      implicit val pos = tree.pos
+      val exportName = topLevelExport.topLevelExportName
+      implicit val pos = topLevelExport.pos
 
       stack.enter(pos, className, "<top-level exports>") {
-        val value = tree match {
+        val value = topLevelExport match {
           case TopLevelJSClassExportDef(_, _) =>
-            loadJSConstructor(className)
+            loadJSConstructor(classInfo)
           case TopLevelModuleExportDef(_, _) =>
-            loadModuleGeneric(className)
+            loadModuleGeneric(classInfo)
           case TopLevelMethodExportDef(_, JSMethodDef(flags, _, args, restParam, body)) =>
             createJSThisFunction(className.nameString, exportName, args, restParam, body)(Env.empty, pos)
           case TopLevelFieldExportDef(_, _, FieldIdent(fieldName)) =>
-            classManager.registerStaticFieldMirror((className, fieldName), exportName)
-            classManager.getStaticField((className, fieldName))
+            classInfo.registerStaticFieldMirror(fieldName, exportName)
+            classInfo.getStaticField(fieldName)
         }
         setJSGlobalRef(exportName, value)
       }
     }
   }
 
-  private def runModuleInitializers(): Unit = {
+  def runModuleInitializers(initializers: List[ModuleInitializer]): Unit = {
     import org.scalajs.linker.interface.unstable.ModuleInitializerImpl._
 
     implicit val pos = Position.NoPosition
 
     val arrayOfStringTypeRef = ArrayTypeRef(ClassRef(BoxedStringClass), 1)
 
-    classManager.modules.foreach { module =>
-      module.initializers.foreach {
+    for (moduleInitializer <- initializers) {
+      val impl = fromInitializer(moduleInitializer.initializer)
+      impl match {
         case MainMethodWithArgs(className, methodName, args) =>
-          val argArray = ArrayValue(arrayOfStringTypeRef, args.map(StringLiteral(_)))
-          val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), List(argArray))(NoType)
-          execute(tree)
+          stack.enter(pos, className, "<module-initializer>") {
+            val argArray = ArrayValue(arrayOfStringTypeRef, args.map(StringLiteral(_)))
+            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), List(argArray))(NoType)
+            execute(tree)
+          }
         case VoidMainMethod(className, methodName) =>
-          val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), Nil)(NoType)
-          execute(tree)
+          stack.enter(pos, className, "<module-initializer>") {
+            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), Nil)(NoType)
+            execute(tree)
+          }
       }
     }
   }
@@ -150,9 +115,10 @@ class Executor(val classManager: ClassManager) {
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
 
-    val (actualClassName, methodDef) = classManager.lookupMethodDef(className, methodName, namespace)
+    val classInfo = interpreter.getClassInfo(className)
+    val (actualClassInfo, methodDef) = classInfo.lookupMethod(namespace, methodName)
 
-    if (actualClassName == ThrowableClass && methodName == fillInStackTraceMethodName) {
+    if (actualClassInfo.className == ThrowableClass && methodName == fillInStackTraceMethodName) {
       val th = receiver.get
       val stackTrace = stack.captureStackTrace(pos)
       val stackTraceElements = stackTrace.map { e =>
@@ -168,7 +134,7 @@ class Executor(val classManager: ClassManager) {
       applyMethodDefGeneric(ThrowableClass, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
     }
 
-    stack.enter(pos, actualClassName, methodName) {
+    stack.enter(pos, actualClassInfo.className, methodName) {
       val innerEnv = methodDef.args.zip(args).foldLeft(Env.empty.setThis(receiver)) { (env, paramAndArg) =>
         env.bind(paramAndArg._1.name.name, paramAndArg._2)
       }
@@ -222,11 +188,14 @@ class Executor(val classManager: ClassManager) {
       }
 
     case SelectStatic(className, FieldIdent(fieldName)) =>
-      classManager.getStaticField((className, fieldName))
+      implicit val pos = program.pos
+      val classInfo = interpreter.getClassInfo(className)
+      classInfo.getStaticField(fieldName)
 
     case SelectJSNativeMember(className, MethodIdent(methodName)) =>
       implicit val pos = program.pos
-      val memberDef = classManager.lookupJSNativeMember(className, methodName)
+      val classInfo = interpreter.getClassInfo(className)
+      val memberDef = classInfo.lookupJSNativeMember(methodName)
       loadJSNativeLoadSpec(memberDef.jsNativeLoadSpec)
 
     case ArraySelect(array, index) =>
@@ -311,12 +280,14 @@ class Executor(val classManager: ClassManager) {
       applyMethodDefGeneric(className, ctor.name, MemberNamespace.Constructor, Some(instance), eargs)
       instance
 
-    case LoadModule(name) =>
+    case LoadModule(className) =>
       implicit val pos = program.pos
-      loadModule(name)
+      loadModule(interpreter.getClassInfo(className))
 
-    case StoreModule(name, tree) =>
-      classManager.storeModule(name, eval(tree).asInstanceOf[Instance])
+    case StoreModule(className, tree) =>
+      implicit val pos = program.pos
+      val instance = eval(tree)
+      interpreter.getClassInfo(className).storeModuleClassInstance(instance)
 
     case Assign(lhs, rhs) => evalAssign(lhs, eval(rhs))
 
@@ -430,15 +401,15 @@ class Executor(val classManager: ClassManager) {
 
     case LoadJSModule(className) =>
       implicit val pos = program.pos
-      loadJSModule(className)
+      loadJSModule(interpreter.getClassInfo(className))
 
     case LoadJSConstructor(className) =>
       implicit val pos = program.pos
-      loadJSConstructor(className)
+      loadJSConstructor(interpreter.getClassInfo(className))
 
     case CreateJSClass(className, captureValues) =>
       implicit val pos = program.pos
-      createJSClass(className, captureValues, env)
+      createJSClass(interpreter.getClassInfo(className), captureValues, env)
 
     case JSSuperConstructorCall(_) =>
       throw new AssertionError("JSSuperConstructorCall should never be called in eval loop")
@@ -469,9 +440,11 @@ class Executor(val classManager: ClassManager) {
       evalAsInstanceOf(eval(tree), tpe)
 
     case IsInstanceOf(expr, tpe) =>
+      implicit val pos = program.pos
       evalIsInstanceOf(eval(expr), tpe)
 
     case GetClass(e) =>
+      implicit val pos = program.pos
       (eval(e): Any) match {
         case Instance(instance)   => getClassOf(ClassRef(instance.className))
         case array: ArrayInstance => getClassOf(array.typeRef)
@@ -503,6 +476,7 @@ class Executor(val classManager: ClassManager) {
       }
 
     case ClassOf(typeRef) =>
+      implicit val pos = program.pos
       getClassOf(typeRef)
 
     case IdentityHashCode(expr) =>
@@ -555,22 +529,25 @@ class Executor(val classManager: ClassManager) {
   }
 
   private def createNewInstance(className: ClassName)(implicit pos: Position): Instance = {
-    val jsClass = jsClasses.getOrElseUpdate(className, {
-      val isThrowable = classManager.lookupClassDef(className).ancestors.contains(ThrowableClass)
+    val classInfo = interpreter.getClassInfo(className)
+
+    val jsClass = classInfo.getJSClass {
+      val isThrowable = classInfo.ancestorsIncludingThis.contains(interpreter.getClassInfo(ThrowableClass))
       val ctor = Instance.newInstanceClass(className, isThrowable)
       setFunctionName(ctor, className.nameString)
       ctor
-    })
+    } { ctor =>
+    }
 
     val instance = js.Dynamic.newInstance(jsClass)().asInstanceOf[Instance]
-    classManager.forEachAncestor(className) { linkedClass =>
-      linkedClass.fields.foreach {
+    classInfo.forEachAncestorClass { superclassInfo =>
+      superclassInfo.instanceFieldDefs.foreach {
         case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
-          instance.setField((linkedClass.className, fieldName), Types.zeroOf(tpe))
+          instance.setField((superclassInfo.className, fieldName), Types.zeroOf(tpe))
         case JSFieldDef(flags, name, ftpe) =>
           throw new AssertionError("Trying to init JSField on a Scala class")
       }
-      attachExportedMembers(instance, staticTarget = null, linkedClass)(Env.empty)
+      attachExportedMembers(instance, staticTarget = null, superclassInfo)(Env.empty)
     }
     instance
   }
@@ -658,7 +635,8 @@ class Executor(val classManager: ClassManager) {
         propDesc.value = value
 
     case SelectStatic(className, FieldIdent(fieldName)) =>
-      classManager.setStaticField((className, fieldName), value)
+      implicit val pos = selector.pos
+      interpreter.getClassInfo(className).setStaticField(fieldName, value)
 
     case JSGlobalRef(name) =>
       setJSGlobalRef(name, value)
@@ -712,44 +690,42 @@ class Executor(val classManager: ClassManager) {
     }
   }
 
-  def loadModuleGeneric(className: ClassName)(implicit pos: Position): js.Any = {
-    val classDef = classManager.lookupClassDef(className)
-    classDef.kind match {
-      case ModuleClass => loadModule(className)
-      case _           => loadJSModule(className)
+  def loadModuleGeneric(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+    classInfo.kind match {
+      case ModuleClass => loadModule(classInfo)
+      case _           => loadJSModule(classInfo)
     }
   }
 
-  def loadModule(className: ClassName)(implicit pos: Position): js.Any = {
-    classManager.loadModule(className, {
+  def loadModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+    classInfo.getModuleClassInstance {
+      val className = classInfo.className
       stack.enter(pos, className, ClassInitializerName) {
         eval(New(className, MethodIdent(NoArgConstructorName), List()))(Env.empty).asInstanceOf[Instance]
       }
-    })
+    }
   }
 
-  def loadJSModule(className: ClassName)(implicit pos: Position): js.Any = {
-    val classDef = classManager.lookupClassDef(className)
-    classDef.kind match {
+  def loadJSModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+    classInfo.kind match {
       case NativeJSModuleClass =>
-        loadJSNativeLoadSpec(classDef.jsNativeLoadSpec.get)
+        loadJSNativeLoadSpec(classInfo.classDef.jsNativeLoadSpec.get)
       case JSModuleClass =>
-        jsModules.getOrElseUpdate(className, {
-          val cls = initJSClass(className)
+        classInfo.getModuleClassInstance {
+          val cls = initJSClass(classInfo)
           js.Dynamic.newInstance(cls)()
-        })
+        }
       case classKind =>
         throw new AssertionError(s"Unsupported LoadJSModule for $classKind")
     }
   }
 
-  def loadJSConstructor(className: ClassName)(implicit pos: Position): js.Any = {
-    val classDef = classManager.lookupClassDef(className)
-    classDef.kind match {
+  def loadJSConstructor(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+    classInfo.kind match {
       case NativeJSClass =>
-        loadJSNativeLoadSpec(classDef.jsNativeLoadSpec.get)
+        loadJSNativeLoadSpec(classInfo.classDef.jsNativeLoadSpec.get)
       case JSClass =>
-        initJSClass(className)
+        initJSClass(classInfo)
       case classKind =>
         throw new AssertionError(s"Unsupported LoadJSConstructor for $classKind")
     }
@@ -774,7 +750,7 @@ class Executor(val classManager: ClassManager) {
     case _ => throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()} at $pos")
   }
 
-  def evalIsInstanceOf(value: js.Any, t: Type): Boolean = (value: Any) match {
+  def evalIsInstanceOf(value: js.Any, t: Type)(implicit pos: Position): Boolean = (value: Any) match {
     case null =>
       false
     case _: Boolean =>
@@ -805,9 +781,10 @@ class Executor(val classManager: ClassManager) {
       ClassType(ObjectClass) <:< t
   }
 
-  private def getClassOf(typeRef: TypeRef): js.Any = {
-    classManager.lookupClassInstance(typeRef, {
-      implicit val pos = NoPosition
+  private val classOfCache = mutable.Map.empty[TypeRef, js.Any]
+
+  private def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
+    classOfCache.getOrElseUpdate(typeRef, {
       val tmp = LocalName("dataTmp")
       eval(New(
         ClassClass,
@@ -822,7 +799,7 @@ class Executor(val classManager: ClassManager) {
 
   //   def getSuperclass(): Class[_ >: A] = js.native
 
-  def genTypeData(typeRef: TypeRef): js.Any = {
+  def genTypeData(typeRef: TypeRef)(implicit pos: Position): js.Any = {
     val typeData = genTypeDataObject(typeRef).asInstanceOf[js.Dynamic]
 
     typeData.internalTypeRef = typeRef.asInstanceOf[js.Any]
@@ -832,10 +809,10 @@ class Executor(val classManager: ClassManager) {
         case PrimRef(_) =>
           false
         case ClassRef(className) =>
-          val linkedClass = classManager.lookupClassDef(className)
-          if (linkedClass.kind == JSClass || linkedClass.kind == NativeJSClass)
-            js.special.instanceof(obj, loadJSConstructor(className)(NoPosition))
-          else if (linkedClass.kind.isJSType)
+          val classInfo = interpreter.getClassInfo(className)
+          if (classInfo.kind == JSClass || classInfo.kind == NativeJSClass)
+            js.special.instanceof(obj, loadJSConstructor(classInfo)(NoPosition))
+          else if (classInfo.kind.isJSType)
             noIsInstance()
           else
             evalIsInstanceOf(obj, ClassType(className))
@@ -855,8 +832,8 @@ class Executor(val classManager: ClassManager) {
         case ClassRef(ObjectClass) =>
           () // OK
         case ClassRef(className) =>
-          val linkedClass = classManager.classes(className)
-          if (linkedClass.kind.isJSType)
+          val classInfo = interpreter.getClassInfo(className)
+          if (classInfo.kind.isJSType)
             () // OK
           else
             evalAsInstanceOf(obj, ClassType(className))
@@ -887,7 +864,7 @@ class Executor(val classManager: ClassManager) {
         new js.TypeError("Cannot call isInstance() on a Class representing a JS trait/object"))
   }
 
-  private def isAssignableFrom(target: TypeRef, source: TypeRef): Boolean = {
+  private def isAssignableFrom(target: TypeRef, source: TypeRef)(implicit pos: Position): Boolean = {
     (target == source) || {
       (target, source) match {
         case (ClassRef(targetCls), ClassRef(sourceCls)) =>
@@ -902,11 +879,10 @@ class Executor(val classManager: ClassManager) {
     }
   }
 
-  def genTypeDataObject(typeRef: TypeRef): js.Object = typeRef match {
+  def genTypeDataObject(typeRef: TypeRef)(implicit pos: Position): js.Object = typeRef match {
     case ClassRef(className) =>
-      val classDef = classManager.lookupClassDef(className)
-      val runtimeClassName = classManager.runtimeClassName(classDef)
-      typeDataLiteral(runtimeClassName, false, classDef.kind == Interface, false)
+      val classInfo = interpreter.getClassInfo(className)
+      typeDataLiteral(classInfo.runtimeClassName, false, classInfo.kind == Interface, false)
     case arrRef: ArrayTypeRef =>
       typeDataLiteral(genArrayName(arrRef), false, false, true)
     case primRef: PrimRef =>
@@ -950,46 +926,38 @@ class Executor(val classManager: ClassManager) {
   }
 
   /* Generates JSClass value */
-  def initJSClass(className: ClassName)(implicit pos: Position): js.Dynamic = {
-    jsClasses.get(className) match {
-      case Some(ctor) =>
-        ctor
-
-      case None =>
-        val ctor = createJSClass(className, Nil, Env.empty)
-        jsClasses(className) = ctor
-
-        // Run the class initializer, if any
-        val clinitOpt = classManager.lookupClassDef(className).methods.find { m =>
-          m.value.methodName.isClassInitializer
+  def initJSClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
+    classInfo.getJSClass {
+      createJSClass(classInfo, Nil, Env.empty)
+    } { ctor =>
+      // Run the class initializer, if any
+      val clinitOpt = classInfo.maybeLookupStaticConstructor(ClassInitializerName)
+      for (clinit <- clinitOpt) {
+        stack.enter(pos, classInfo.className, clinit.methodName) {
+          eval(clinit.body.get)(Env.empty)
         }
-        for (clinit <- clinitOpt) {
-          stack.enter(pos, className, clinit.value.methodName) {
-            eval(clinit.value.body.get)(Env.empty)
-          }
-        }
-
-        ctor
+      }
     }
   }
 
-  def createJSClass(className: ClassName, captureValues: List[Tree], topEnv: Env)(
+  def createJSClass(classInfo: ClassInfo, captureValues: List[Tree], topEnv: Env)(
       implicit pos: Position): js.Dynamic = {
 
-    val linkedClass = classManager.lookupClassDef(className)
+    val classDef = classInfo.classDef
+
     implicit val env = Env.empty.bind(
-      evalArgs(linkedClass.jsClassCaptures.getOrElse(Nil), captureValues)(topEnv)
+      evalArgs(classDef.jsClassCaptures.getOrElse(Nil), captureValues)(topEnv)
     )
 
-    val ctorDef = linkedClass.exportedMembers.map(_.value).find {
+    val ctorDef = classDef.memberDefs.find {
       case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
       case _ => false
-    }.getOrThrow(s"Cannot find constructor in ${linkedClass.className} exportedMembers").asInstanceOf[JSMethodDef]
+    }.getOrThrow(s"Cannot find JS constructor in $classInfo").asInstanceOf[JSMethodDef]
 
     val (preludeTree, superArgs, epilogTree) = splitJSConstructor(ctorDef.body)
 
-    val superClass = linkedClass.jsSuperClass.map(eval).orElse {
-      linkedClass.superClass.map(_.name).map(loadJSConstructor)
+    val superClass = classDef.jsSuperClass.map(eval).orElse {
+      classInfo.superClass.map(loadJSConstructor)
     }.getOrThrow("JSClass must have a super class").asInstanceOf[js.Dynamic]
 
     val parents = js.Dynamic.literal(ParentClass = superClass).asInstanceOf[RawParents]
@@ -1003,7 +971,7 @@ class Executor(val classManager: ClassManager) {
       evalSpread(superArgs)(env).toSeq
 
     def postSuperStatements(thiz: js.Any, env: Env): Unit = {
-      attachFields(thiz.asInstanceOf[js.Object], linkedClass)(env)
+      attachFields(thiz.asInstanceOf[js.Object], classInfo)(env)
       eval(Block(epilogTree))(env.setThis(thiz))
     }
 
@@ -1012,8 +980,8 @@ class Executor(val classManager: ClassManager) {
       postSuperStatements(this, preSuperEnv)
     }
     val ctor = js.constructorOf[Subclass]
-    setFunctionName(ctor, className.nameString)
-    attachExportedMembers(ctor.prototype, ctor, linkedClass)
+    setFunctionName(ctor, classInfo.classNameString)
+    attachExportedMembers(ctor.prototype, ctor, classInfo)
     ctor
   }
 
@@ -1022,16 +990,16 @@ class Executor(val classManager: ClassManager) {
         Descriptor.make(configurable = true, false, false, name))
   }
 
-  def attachExportedMembers(targetObject: js.Any, staticTarget: js.Any, linkedClass: LinkedClass)(
+  def attachExportedMembers(targetObject: js.Any, staticTarget: js.Any, classInfo: ClassInfo)(
       implicit env: Env): Unit = {
-    val classNameString = linkedClass.className.nameString
+    val classNameString = classInfo.classNameString
 
     def targetForFlags(flags: MemberFlags): js.Any =
       if (flags.namespace.isStatic) staticTarget
       else targetObject
 
     if (staticTarget != null) {
-      linkedClass.fields.foreach {
+      classInfo.classDef.memberDefs.foreach {
         case f @ JSFieldDef(flags, name, ftpe) if flags.namespace.isStatic =>
           implicit val pos = f.pos
           val fieldName = eval(name)
@@ -1043,9 +1011,9 @@ class Executor(val classManager: ClassManager) {
       }
     }
 
-    linkedClass.exportedMembers.map(_.value).foreach {
+    classInfo.classDef.memberDefs.foreach {
       case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
-          if flags.namespace == MemberNamespace.Public && linkedClass.kind.isJSClass =>
+          if flags.namespace == MemberNamespace.Public && classInfo.kind.isJSClass =>
         /* Don't reassign the `constructor`. This is already done by virtue of
          * how we create the `class`.
          */
@@ -1061,11 +1029,14 @@ class Executor(val classManager: ClassManager) {
         val prop = eval(name)
         val desc = createJSPropertyDescriptor(classNameString, prop.toString(), descriptor)
         js.Dynamic.global.Object.defineProperty(targetForFlags(flags), prop, desc)
+
+      case _ =>
+        ()
     }
   }
 
-  def attachFields(obj: js.Object, linkedClass: LinkedClass)(implicit env: Env) = {
-    val fields: Instance.Fields = if (linkedClass.fields.exists(_.isInstanceOf[FieldDef])) {
+  def attachFields(obj: js.Object, classInfo: ClassInfo)(implicit env: Env) = {
+    val fields: Instance.Fields = if (classInfo.instanceFieldDefs.exists(_.isInstanceOf[FieldDef])) {
       val existing = obj.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
       if (js.isUndefined(existing)) {
         val fields: Instance.Fields = mutable.Map.empty
@@ -1079,15 +1050,13 @@ class Executor(val classManager: ClassManager) {
       null
     }
 
-    linkedClass.fields.foreach {
+    classInfo.instanceFieldDefs.foreach {
       case JSFieldDef(flags, name, tpe) =>
         val field = eval(name)
         val descriptor = Descriptor.make(true, true, true, Types.zeroOf(tpe))
         js.Dynamic.global.Object.defineProperty(obj, field, descriptor)
       case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
-        fields.update((linkedClass.className, fieldName), Types.zeroOf(tpe))
-      case smth =>
-        throw new Exception(s"Unexpected kind of field: $smth")
+        fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
     }
   }
 }

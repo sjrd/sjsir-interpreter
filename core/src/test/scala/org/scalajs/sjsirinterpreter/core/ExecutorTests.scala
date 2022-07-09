@@ -8,6 +8,8 @@ import org.scalajs.ir.Types._
 import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.OriginalName.NoOriginalName
 
+import org.scalajs.linker.interface.Semantics
+
 import org.scalajs.sjsirinterpreter.core.values._
 
 object ExecutorTests extends TestSuite{
@@ -16,7 +18,7 @@ object ExecutorTests extends TestSuite{
   val x = LocalName("x")
 
   val tests = Tests {
-    val executor = new Executor(ClassManager.empty)
+    val executor = new Interpreter(Semantics.Defaults).executor
 
     test("block execution returns last expression") {
       executor.eval(Block(List(StringLiteral("LOL")))) ==> "LOL"

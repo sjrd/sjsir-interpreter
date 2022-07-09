@@ -34,14 +34,18 @@ object Main {
       (cp, initializers, semantics)
     }
 
-    val irReader = new CliReader(classpath)
-
-    irReader.irFiles.flatMap { irFiles =>
-      Linker.link(irFiles, moduleInitializers, semantics)
-    }.map { moduleSet =>
-      new Executor(ClassManager.fromModuleSet(moduleSet))
+    println("Starting the interpreter")
+    val interpreter = new Interpreter(semantics)
+    val result = for {
+      irFiles <- new CliReader(classpath).irFiles
+      _ <- interpreter.loadIRFiles(irFiles)
+      _ <- interpreter.runModuleInitializers(moduleInitializers)
+    } yield {
       println("Module successfully initialized")
-    }.recover {
+      ()
+    }
+
+    result.recover {
       case th: Throwable =>
         System.err.println("Module initialization failed:")
         th.printStackTrace()

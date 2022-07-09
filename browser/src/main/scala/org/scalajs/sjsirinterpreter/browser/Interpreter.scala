@@ -8,7 +8,7 @@ import scala.scalajs.js.annotation._
 
 import org.scalajs.linker.interface.{ModuleInitializer, Semantics}
 
-import org.scalajs.sjsirinterpreter.core._
+import org.scalajs.sjsirinterpreter.core.{Interpreter => CoreInterpreter, _}
 
 @JSExportTopLevel("Interpreter")
 class Interpreter(
@@ -20,23 +20,26 @@ class Interpreter(
   @scala.annotation.nowarn
   private implicit val ec: ExecutionContext = ExecutionContext.global
 
-  val reader = new BrowserReader(stdPath, irPath)
-
   def run(): Unit = {
-    println("Reading IR...")
-    reader.irFiles.flatMap { irFiles =>
-      println(s"Linking ${irFiles.size} files")
-      val initializers = List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod))
-      Linker.link(irFiles, initializers, Semantics.Defaults)
-    }.map { moduleSet =>
-      println("ModuleSet loaded...")
-      new Executor(ClassManager.fromModuleSet(moduleSet))
-    }.onComplete {
-      case Success(_) =>
-        println("Module successfully initialized")
-      case Failure(exception) =>
-        System.err.println("Module initialization failed")
-        exception.printStackTrace()
+    val semantics = Semantics.Defaults
+    val initializers = List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod))
+
+    println("Starting the interpreter")
+    val interpreter = new CoreInterpreter(semantics)
+    val result = for {
+      irFiles <- new BrowserReader(stdPath, irPath).irFiles
+      _ <- interpreter.loadIRFiles(irFiles)
+      _ <- interpreter.runModuleInitializers(initializers)
+    } yield {
+      println("Module successfully initialized")
+      ()
+    }
+
+    result.recover {
+      case th: Throwable =>
+        System.err.println("Module initialization failed:")
+        th.printStackTrace()
+        js.Dynamic.global.process.exit(1)
     }
   }
 }

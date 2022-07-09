@@ -8,6 +8,8 @@ import org.scalajs.ir.Types._
 import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.OriginalName.NoOriginalName
 
+import org.scalajs.linker.interface.Semantics
+
 import org.scalajs.sjsirinterpreter.core.values._
 
 object TypesTests extends TestSuite{
@@ -15,7 +17,7 @@ object TypesTests extends TestSuite{
   implicit val env = Env.empty
 
   val tests = Tests {
-    val e = new Executor(ClassManager.empty)
+    val e = new Interpreter(Semantics.Defaults).executor
 
     test("asInstanceOf") {
       val variants = Seq(

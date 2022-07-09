@@ -8,6 +8,8 @@ import org.scalajs.ir.Trees._
 import org.scalajs.ir.Names.LocalName
 import org.scalajs.ir.OriginalName
 
+import org.scalajs.linker.interface.Semantics
+
 import org.scalajs.sjsirinterpreter.core._
 
 object ObjectTests extends TestSuite{
@@ -16,7 +18,7 @@ object ObjectTests extends TestSuite{
   val x = LocalName("x")
 
   val tests = Tests {
-    val executor = new Executor(ClassManager.empty)
+    val executor = new Interpreter(Semantics.Defaults).executor
     val objTree = JSObjectConstr(List(
       (StringLiteral("a"), IntLiteral(1)),
       (StringLiteral("b"), BooleanLiteral(true)),

@@ -8,6 +8,8 @@ import org.scalajs.ir.Trees._
 import org.scalajs.ir.Names.LocalName
 import org.scalajs.ir.OriginalName
 
+import org.scalajs.linker.interface.Semantics
+
 import org.scalajs.sjsirinterpreter.core._
 
 object GlobalTests extends TestSuite{
@@ -15,7 +17,7 @@ object GlobalTests extends TestSuite{
   implicit val env = Env.empty
 
   val tests = Tests {
-    val executor = new Executor(ClassManager.empty)
+    val executor = new Interpreter(Semantics.Defaults).executor
 
     test("JSGlobalRef") {
       executor.eval(JSGlobalRef("console")) ==> js.Dynamic.global.console
