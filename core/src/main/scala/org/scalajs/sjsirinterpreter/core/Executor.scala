@@ -328,7 +328,7 @@ class Executor(val classManager: ClassManager) {
       applyMethodDefGeneric(className, methodIdent.name, namespace, None, eargs)
 
     case ApplyDynamicImport(_, _, _, _) =>
-      unimplemented(program, "eval")
+      throw new AssertionError(s"Unexpected ApplyDynamicImport at ${program.pos}")
 
     case New(className, ctor, args) =>
       implicit val pos = program.pos
@@ -470,10 +470,10 @@ class Executor(val classManager: ClassManager) {
       throw new AssertionError("JSSuperConstructorCall should never be called in eval loop")
 
     case JSImportCall(_) =>
-      unimplemented(program, "eval")
+      throw new AssertionError(s"Unexpected JSImportCall at ${program.pos}")
 
     case JSImportMeta() =>
-      unimplemented(program, "eval")
+      throw new AssertionError(s"Unexpected JSImportMeta at ${program.pos}")
 
     case JSNewTarget() =>
       env.getNewTarget
@@ -1116,14 +1116,6 @@ class Executor(val classManager: ClassManager) {
         throw new Exception(s"Unexpected kind of field: $smth")
     }
   }
-
-  def unimplemented(t: Any, site: String = "default") = {
-    p(s"Unimplemented at $site")
-    println(t)
-    ???
-  }
-
-  def p = js.Dynamic.global.console.log
 }
 
 object Executor {
