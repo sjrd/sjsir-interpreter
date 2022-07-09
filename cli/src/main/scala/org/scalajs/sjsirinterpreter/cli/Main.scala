@@ -4,11 +4,6 @@ import scala.concurrent.ExecutionContext
 
 import scala.scalajs.js
 
-import org.scalajs.ir.Trees._
-import org.scalajs.ir.Position
-import org.scalajs.ir.Types._
-import org.scalajs.ir.Names.ClassName
-import org.scalajs.linker.interface.unstable.ModuleInitializerImpl._
 import org.scalajs.linker.interface.{ModuleInitializer, Semantics}
 
 import org.scalajs.sjsirinterpreter.core._
@@ -44,30 +39,13 @@ object Main {
     irReader.irFiles.flatMap { irFiles =>
       Linker.link(irFiles, moduleInitializers, semantics)
     }.map { moduleSet =>
-      val executor = new Executor(ClassManager.fromModuleSet(moduleSet))
-      implicit val pos = Position.NoPosition
-      moduleSet.modules.foreach { module =>
-        module.initializers.foreach {
-          case MainMethodWithArgs(className, methodName, args) =>
-            val values = List(convertArgs(args))
-            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), values)(NoType)
-            executor.execute(tree)
-          case VoidMainMethod(className, methodName) =>
-            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), List())(NoType)
-            executor.execute(tree)
-        }
-      }
-      println("Run completed successfully")
+      new Executor(ClassManager.fromModuleSet(moduleSet))
+      println("Module successfully initialized")
     }.recover {
       case th: Throwable =>
-        System.err.println("Run failed:")
+        System.err.println("Module initialization failed:")
         th.printStackTrace()
         js.Dynamic.global.process.exit(1)
     }
   }
-
-  def convertArgs(args: List[String]): Tree = ArrayValue(
-    ArrayTypeRef.of(ClassRef(ClassName("java.lang.String"))),
-    args map (StringLiteral(_)(Position.NoPosition))
-  )(Position.NoPosition)
 }

@@ -13,6 +13,7 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.ClassKind._
+
 import org.scalajs.linker.standard.LinkedClass
 
 import org.scalajs.sjsirinterpreter.core.ops._
@@ -50,6 +51,7 @@ class Executor(val classManager: ClassManager) {
   createTopLevelExportDefinitions()
   runStaticInitializers()
   runTopLevelExports()
+  runModuleInitializers()
 
   private def createTopLevelExportDefinitions(): Unit = {
     val topLevelVars = classManager.modules
@@ -116,6 +118,26 @@ class Executor(val classManager: ClassManager) {
             classManager.getStaticField((className, fieldName))
         }
         setJSGlobalRef(exportName, value)
+      }
+    }
+  }
+
+  private def runModuleInitializers(): Unit = {
+    import org.scalajs.linker.interface.unstable.ModuleInitializerImpl._
+
+    implicit val pos = Position.NoPosition
+
+    val arrayOfStringTypeRef = ArrayTypeRef(ClassRef(BoxedStringClass), 1)
+
+    classManager.modules.foreach { module =>
+      module.initializers.foreach {
+        case MainMethodWithArgs(className, methodName, args) =>
+          val argArray = ArrayValue(arrayOfStringTypeRef, args.map(StringLiteral(_)))
+          val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), List(argArray))(NoType)
+          execute(tree)
+        case VoidMainMethod(className, methodName) =>
+          val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), Nil)(NoType)
+          execute(tree)
       }
     }
   }
