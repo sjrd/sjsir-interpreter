@@ -330,6 +330,13 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def storeModuleClassInstance(instance: js.Any): Unit =
     moduleClassInstance = instance
 
+  private var isInstanceFun: (Any => Boolean) = null
+  def getIsInstanceFun(init: => (Any => Boolean)): (Any => Boolean) = {
+    if (isInstanceFun == null)
+      isInstanceFun = init
+    isInstanceFun
+  }
+
   def getStaticField(fieldName: FieldName)(implicit pos: Position): js.Any = {
     staticFields.getOrElse(fieldName, {
       throw new AssertionError(s"Static field ${fieldName.nameString} on $classNameString not found at $pos")
@@ -357,18 +364,4 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   def topLevelExportNames: List[String] =
     classDef.topLevelExportDefs.map(_.topLevelExportName)
-
-  def runStaticInitializer(): Unit = {
-    if (!staticInitializerRun) {
-      staticInitializerRun = true
-      // TODO Run static initializer
-    }
-  }
-
-  def initializeTopLevelExports(): Unit = {
-    if (!topLevelExportsInitialized) {
-      topLevelExportsInitialized = true
-      // Initialize top-level exports
-    }
-  }
 }

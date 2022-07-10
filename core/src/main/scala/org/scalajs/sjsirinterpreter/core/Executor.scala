@@ -749,50 +749,110 @@ final class Executor(val interpreter: Interpreter) {
     case _ => throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()} at $pos")
   }
 
-  def evalIsInstanceOf(value: js.Any, t: Type)(implicit pos: Position): Boolean = {
-    val isSubclassFun: (ClassName, ClassName) => Boolean =
-      (left, right) => interpreter.getClassInfo(left).isSubclass(right)
-
-    def sub(left: Type, right: Type): Boolean =
-      isSubtype(left, right)(isSubclassFun)
-
-    (value: Any) match {
-      case null =>
+  def evalIsInstanceOf(value: Any, t: Type)(implicit pos: Position): Boolean = {
+    t match {
+      case _ if value == null =>
         false
-      case _: Boolean =>
-        sub(BooleanType, t)
-      case _: Double =>
-        (value: Any) match {
-          case _: Int =>
-            (value: Any) match {
-              case _: Byte =>
-                sub(ByteType, t) || sub(ShortType, t) || sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
-              case _: Short =>
-                sub(ShortType, t) || sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
-              case _: Float =>
-                sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
-              case _ =>
-                sub(IntType, t) || sub(DoubleType, t)
-            }
-          case _: Float =>
-            sub(FloatType, t) || sub(DoubleType, t)
-          case _ =>
-            sub(DoubleType, t)
+      case AnyType =>
+        true
+      case StringType =>
+        value.isInstanceOf[String]
+      case t: PrimTypeWithRef =>
+        (t.primRef.charCode: @switch) match {
+          case 'Z' => value.isInstanceOf[Boolean]
+          case 'C' => value.isInstanceOf[CharInstance]
+          case 'B' => value.isInstanceOf[Byte]
+          case 'S' => value.isInstanceOf[Short]
+          case 'I' => value.isInstanceOf[Int]
+          case 'J' => value.isInstanceOf[LongInstance]
+          case 'F' => value.isInstanceOf[Float]
+          case 'D' => value.isInstanceOf[Double]
+          case 'V' | 'N' | 'E' => false
         }
-      case _: String =>
-        sub(StringType, t)
-      case () =>
-        sub(UndefType, t)
-      case _: LongInstance =>
-        sub(LongType, t)
-      case _: CharInstance =>
-        sub(CharType, t)
-      case Instance(value) =>
-        sub(value.classInfo.toType, t)
-      case array: ArrayInstance =>
-        sub(ArrayType(array.typeRef), t)
-      case _ =>
-        sub(ClassType(ObjectClass), t)
+      case ClassType(className) =>
+        val classInfo = interpreter.getClassInfo(className)
+        classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))(value)
+      case UndefType =>
+        js.isUndefined(value)
+      case t: ArrayType =>
+        value match {
+          case value: ArrayInstance =>
+            isSubtype(ArrayType(value.typeRef), t) { (lhs, rhs) =>
+              interpreter.getClassInfo(lhs).isSubclass(rhs)
+            }
+          case _ =>
+            false
+        }
+      case _: RecordType =>
+        throw new AssertionError(s"Unexpected RecordType at $pos")
+    }
+  }
+
+  private def initIsInstanceFun(classInfo: ClassInfo)(implicit pos: Position): (Any => Boolean) = {
+    classInfo.kind match {
+      case HijackedClass =>
+        classInfo.className match {
+          case BoxedUnitClass      => (value => value == ())
+          case BoxedBooleanClass   => (value => value.isInstanceOf[Boolean])
+          case BoxedCharacterClass => (value => value.isInstanceOf[CharInstance])
+          case BoxedByteClass      => (value => value.isInstanceOf[Byte])
+          case BoxedShortClass     => (value => value.isInstanceOf[Short])
+          case BoxedIntegerClass   => (value => value.isInstanceOf[Int])
+          case BoxedLongClass      => (value => value.isInstanceOf[LongInstance])
+          case BoxedFloatClass     => (value => value.isInstanceOf[Float])
+          case BoxedDoubleClass    => (value => value.isInstanceOf[Double])
+          case BoxedStringClass    => (value => value.isInstanceOf[String])
+
+          case _ =>
+            throw new AssertionError(s"Unknown hijacked class $classInfo at $pos")
+        }
+
+      case Class | ModuleClass | Interface =>
+        val className = classInfo.className
+
+        if (className == ObjectClass) {
+          (value => value != null)
+        } else {
+          val canBeNumber = interpreter.getClassInfo(BoxedDoubleClass).isSubclass(className)
+          val canBeString = interpreter.getClassInfo(BoxedStringClass).isSubclass(className)
+          val canBeBoolean = interpreter.getClassInfo(BoxedBooleanClass).isSubclass(className)
+          val canBeChar = interpreter.getClassInfo(BoxedCharacterClass).isSubclass(className)
+          val canBeArray = className == CloneableClass || className == SerializableClass
+
+          if (!(canBeNumber || canBeString || canBeBoolean || canBeChar || canBeArray)) {
+            // Fast path for the common case
+            { value =>
+              value match {
+                case Instance(value) => value.classInfo.isSubclass(className)
+                case _               => false
+              }
+            }
+          } else {
+            { value =>
+              value match {
+                case Instance(value)  => value.classInfo.isSubclass(className)
+                case _: Double        => canBeNumber
+                case _: String        => canBeString
+                case _: Boolean       => canBeBoolean
+                case _: LongInstance  => canBeNumber
+                case _: CharInstance  => canBeChar
+                case _: ArrayInstance => canBeArray
+                case _                => false
+              }
+            }
+          }
+        }
+
+      case JSClass | NativeJSClass =>
+        { value =>
+          js.special.instanceof(value, loadJSConstructor(classInfo))
+        }
+
+      case AbstractJSType | JSModuleClass | NativeJSModuleClass =>
+        { value =>
+          throw js.JavaScriptException(
+              new js.TypeError(s"Cannot call isInstance() on Class $classInfo representing a JS trait/object"))
+        }
     }
   }
 
@@ -825,12 +885,7 @@ final class Executor(val interpreter: Interpreter) {
           false
         case ClassRef(className) =>
           val classInfo = interpreter.getClassInfo(className)
-          if (classInfo.kind == JSClass || classInfo.kind == NativeJSClass)
-            js.special.instanceof(obj, loadJSConstructor(classInfo)(NoPosition))
-          else if (classInfo.kind.isJSType)
-            noIsInstance()
-          else
-            evalIsInstanceOf(obj, ClassType(className))
+          classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))(obj)
         case typeRef: ArrayTypeRef =>
           evalIsInstanceOf(obj, ArrayType(typeRef))
       }
