@@ -17,6 +17,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   val classNameString: String = className.nameString
   val kind = classDef.kind
+  val isTheThrowableClass = className == Executor.ThrowableClass
 
   val typeRef: ClassRef = ClassRef(className)
 
@@ -63,6 +64,9 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   def isSubclass(that: ClassName)(implicit pos: Position): Boolean =
     ancestorsForSubclassLookup.contains(that)
+
+  def isThrowableClass(implicit pos: Position): Boolean =
+    ancestorsForSubclassLookup.contains(Executor.ThrowableClass)
 
   /** Runs the given callback for each of the ancestor classes of this
    *  ClassInfo, from top (`j.l.Object`) to bottom (this ClassInfo).

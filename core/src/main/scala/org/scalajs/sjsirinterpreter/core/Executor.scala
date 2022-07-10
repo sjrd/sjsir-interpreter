@@ -110,11 +110,16 @@ final class Executor(val interpreter: Interpreter) {
   private def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
+    applyMethodDefGeneric(interpreter.getClassInfo(className), methodName, namespace, receiver, args)
+  }
 
-    val classInfo = interpreter.getClassInfo(className)
+  private def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
+      receiver: Option[js.Any], args: List[js.Any])(
+      implicit pos: Position): js.Any = {
+
     val (actualClassInfo, methodDef) = classInfo.lookupMethod(namespace, methodName)
 
-    if (actualClassInfo.className == ThrowableClass && methodName == fillInStackTraceMethodName) {
+    if (actualClassInfo.isTheThrowableClass && methodName == fillInStackTraceMethodName) {
       val th = receiver.get
       val stackTrace = stack.captureStackTrace(pos)
       val stackTraceElements = stackTrace.map { e =>
@@ -231,26 +236,26 @@ final class Executor(val interpreter: Interpreter) {
         instance.toString()
       } else {
         // SJSIRRepresentiveClass(instance)
-        val className: ClassName = (instance: Any) match {
-          case Instance(instance) => instance.className
-          case _: Boolean         => BoxedBooleanClass
-          case _: CharInstance    => BoxedCharacterClass
-          case _: Double          => BoxedDoubleClass // All `number`s use java.lang.Double, by spec
-          case _: LongInstance    => BoxedLongClass
-          case _: String          => BoxedStringClass
-          case ()                 => BoxedUnitClass
-          case _                  => ObjectClass
+        val classInfo = (instance: Any) match {
+          case Instance(instance) => instance.classInfo
+          case _: Boolean         => interpreter.getClassInfo(BoxedBooleanClass)
+          case _: CharInstance    => interpreter.getClassInfo(BoxedCharacterClass)
+          case _: Double          => interpreter.getClassInfo(BoxedDoubleClass) // All `number`s use jl.Double, by spec
+          case _: LongInstance    => interpreter.getClassInfo(BoxedLongClass)
+          case _: String          => interpreter.getClassInfo(BoxedStringClass)
+          case ()                 => interpreter.getClassInfo(BoxedUnitClass)
+          case _                  => interpreter.getClassInfo(ObjectClass)
         }
 
         val patchedMethodName = {
-          if (className == BoxedDoubleClass && numberCompareToMethodNames.contains(method.name))
+          if (classInfo.className == BoxedDoubleClass && numberCompareToMethodNames.contains(method.name))
             doubleCompareToMethodName
           else
             method.name
         }
 
         val eargs = args.map(eval(_))
-        applyMethodDefGeneric(className, patchedMethodName, MemberNamespace.Public, Some(instance), eargs)
+        applyMethodDefGeneric(classInfo, patchedMethodName, MemberNamespace.Public, Some(instance), eargs)
       }
 
     case ApplyStatically(flags, tree, className, methodIdent, args) =>
@@ -271,9 +276,10 @@ final class Executor(val interpreter: Interpreter) {
 
     case New(className, ctor, args) =>
       implicit val pos = program.pos
-      val instance = createNewInstance(className)
+      val classInfo = interpreter.getClassInfo(className)
+      val instance = createNewInstance(classInfo)
       val eargs = args.map(eval(_))
-      applyMethodDefGeneric(className, ctor.name, MemberNamespace.Constructor, Some(instance), eargs)
+      applyMethodDefGeneric(classInfo, ctor.name, MemberNamespace.Constructor, Some(instance), eargs)
       instance
 
     case LoadModule(className) =>
@@ -442,7 +448,7 @@ final class Executor(val interpreter: Interpreter) {
     case GetClass(e) =>
       implicit val pos = program.pos
       (eval(e): Any) match {
-        case Instance(instance)   => getClassOf(ClassRef(instance.className))
+        case Instance(instance)   => getClassOf(ClassRef(instance.classInfo.className))
         case array: ArrayInstance => getClassOf(array.typeRef)
         case _: LongInstance      => getClassOf(ClassRef(BoxedLongClass))
         case _: CharInstance      => getClassOf(ClassRef(BoxedCharacterClass))
@@ -462,7 +468,7 @@ final class Executor(val interpreter: Interpreter) {
       val value = eval(expr)
       value match {
         case Instance(value) =>
-          val result = createNewInstance(value.className)
+          val result = createNewInstance(value.classInfo)
           result.fields ++= value.fields
           result
         case value: ArrayInstance =>
@@ -524,13 +530,10 @@ final class Executor(val interpreter: Interpreter) {
       throw new AssertionError(s"unexpected Transient in eval at ${program.pos}")
   }
 
-  private def createNewInstance(className: ClassName)(implicit pos: Position): Instance = {
-    val classInfo = interpreter.getClassInfo(className)
-
+  private def createNewInstance(classInfo: ClassInfo)(implicit pos: Position): Instance = {
     val jsClass = classInfo.getJSClass {
-      val isThrowable = classInfo.ancestorsIncludingThis.contains(interpreter.getClassInfo(ThrowableClass))
-      val ctor = Instance.newInstanceClass(className, isThrowable)
-      setFunctionName(ctor, className.nameString)
+      val ctor = Instance.newInstanceClass(classInfo)
+      setFunctionName(ctor, classInfo.classNameString)
       ctor
     } { ctor =>
     }
@@ -785,7 +788,7 @@ final class Executor(val interpreter: Interpreter) {
       case _: CharInstance =>
         sub(CharType, t)
       case Instance(value) =>
-        sub(ClassType(value.className), t)
+        sub(value.classInfo.toType, t)
       case array: ArrayInstance =>
         sub(ArrayType(array.typeRef), t)
       case _ =>

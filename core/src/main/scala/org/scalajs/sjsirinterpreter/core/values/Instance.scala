@@ -6,20 +6,22 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation._
 
 import org.scalajs.ir.Names._
+import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 
+import org.scalajs.sjsirinterpreter.core._
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 trait Instance extends js.Object {
-  @JSName(Instance.instanceClassName)
-  val className: ClassName
+  @JSName(Instance.instanceClassInfo)
+  val classInfo: ClassInfo
 
   @JSName(Instance.instanceFields)
   val fields: Instance.Fields
 }
 
 object Instance {
-  val instanceClassName: js.Symbol = js.Symbol("className")
+  val instanceClassInfo: js.Symbol = js.Symbol("classInfo")
   val instanceFields: js.Symbol = js.Symbol("fields")
 
   type Fields = mutable.Map[(ClassName, FieldName), js.Any]
@@ -28,42 +30,33 @@ object Instance {
 
   private abstract class ThrowableInstance extends js.Error
 
-  def newInstanceClass(className: ClassName, isThrowable: Boolean): js.Dynamic = {
-    if (isThrowable) {
+  def newInstanceClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
+    @inline
+    def createCoreFields(obj: js.Object): Unit = {
+      js.Dynamic.global.Object.defineProperty(obj, instanceClassInfo, new js.PropertyDescriptor {
+        configurable = false
+        enumerable = false
+        writable = false
+        value = classInfo
+      })
+
+      js.Dynamic.global.Object.defineProperty(obj, instanceFields, new js.PropertyDescriptor {
+        configurable = false
+        enumerable = false
+        writable = false
+        value = (mutable.Map.empty: Fields)
+      })
+    }
+
+    if (classInfo.isThrowableClass) {
       class SpecificThrowableInstance extends ThrowableInstance {
-        js.Dynamic.global.Object.defineProperty(this, instanceClassName, new js.PropertyDescriptor {
-          configurable = false
-          enumerable = false
-          writable = false
-          value = className
-        })
-
-        js.Dynamic.global.Object.defineProperty(this, instanceFields, new js.PropertyDescriptor {
-          configurable = false
-          enumerable = false
-          writable = false
-          value = (mutable.Map.empty: Fields)
-        })
+        createCoreFields(this)
       }
-
       js.constructorOf[SpecificThrowableInstance]
     } else {
       class SpecificObjectInstance extends ObjectInstance {
-        js.Dynamic.global.Object.defineProperty(this, instanceClassName, new js.PropertyDescriptor {
-          configurable = false
-          enumerable = false
-          writable = false
-          value = className
-        })
-
-        js.Dynamic.global.Object.defineProperty(this, instanceFields, new js.PropertyDescriptor {
-          configurable = false
-          enumerable = false
-          writable = false
-          value = (mutable.Map.empty: Fields)
-        })
+        createCoreFields(this)
       }
-
       js.constructorOf[SpecificObjectInstance]
     }
   }
