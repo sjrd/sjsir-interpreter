@@ -28,10 +28,4 @@ object Descriptor {
     }
     None
   }
-
-  @js.native
-  @JSGlobal("Object")
-  object ObjectExtensions extends js.Any {
-    def defineProperty(obj: js.Object, prop: js.Symbol, desc: js.PropertyDescriptor): js.Object = js.native
-  }
 }

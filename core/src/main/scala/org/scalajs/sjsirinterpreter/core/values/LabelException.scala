@@ -1,6 +1,7 @@
 package org.scalajs.sjsirinterpreter.core.values
 
 import scala.scalajs.js
+
 import org.scalajs.ir.Names.LabelName
 
 /**

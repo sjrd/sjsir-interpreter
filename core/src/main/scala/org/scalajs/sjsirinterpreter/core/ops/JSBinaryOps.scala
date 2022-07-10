@@ -1,6 +1,7 @@
 package org.scalajs.sjsirinterpreter.core.ops
 
 import scala.scalajs.js
+
 import org.scalajs.ir.Trees.JSBinaryOp._
 
 object JSBinaryOps {

@@ -1,11 +1,13 @@
 package org.scalajs.sjsirinterpreter.core.values
 
 import scala.collection.mutable
+
 import scala.scalajs.js
+import scala.scalajs.js.annotation.JSName
+
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
-import scala.scalajs.js.annotation.JSName
 
 import org.scalajs.sjsirinterpreter.core.Types
 

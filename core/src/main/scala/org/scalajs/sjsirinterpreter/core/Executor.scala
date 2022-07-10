@@ -16,13 +16,11 @@ import org.scalajs.ir.Position.NoPosition
 import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.ClassKind._
 
-import org.scalajs.linker.standard.LinkedClass
+import org.scalajs.linker.interface.ModuleInitializer
 
 import org.scalajs.sjsirinterpreter.core.ops._
 import org.scalajs.sjsirinterpreter.core.values._
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
-
-import org.scalajs.linker.interface.ModuleInitializer
 
 /** Main execution engine */
 final class Executor(val interpreter: Interpreter) {
@@ -1058,7 +1056,7 @@ final class Executor(val interpreter: Interpreter) {
       if (js.isUndefined(existing)) {
         val fields: Instance.Fields = mutable.Map.empty
         val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
-        Descriptor.ObjectExtensions.defineProperty(obj, fieldsSymbol, descriptor)
+        js.Dynamic.global.Object.defineProperty(obj, fieldsSymbol, descriptor)
         fields
       } else {
         existing.asInstanceOf[Instance.Fields]

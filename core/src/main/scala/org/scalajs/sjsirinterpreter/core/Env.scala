@@ -1,9 +1,10 @@
 package org.scalajs.sjsirinterpreter.core
 
-import org.scalajs.ir.Trees._
 import scala.scalajs.js
+
 import org.scalajs.ir.Names.LocalName
-import utils.Utils.OptionsOps
+
+import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 // class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any]) extends js.Object {
 class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any], newTarget: Option[js.Any]) {

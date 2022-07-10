@@ -1,8 +1,8 @@
 package org.scalajs.sjsirinterpreter.core
 
 import scala.scalajs.js
+
 import org.scalajs.ir.Types._
-import org.scalajs.ir.Names.ClassName
 
 import org.scalajs.sjsirinterpreter.core.values._
 
@@ -70,11 +70,5 @@ object Types {
   def asDouble(value: Any): Double = value match {
     case double: Double => double
     case _ => throw new Error("Interpreter Error: Not a Double")
-  }
-
-  def typeOfRef(typeRef: TypeRef): Type = typeRef match {
-    case arr @ ArrayTypeRef(base, dimensions) => ArrayType(arr)
-    case ClassRef(className) => ClassType(className)
-    case PrimRef(tpe) => tpe
   }
 }
