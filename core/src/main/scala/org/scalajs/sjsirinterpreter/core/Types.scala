@@ -8,11 +8,6 @@ import org.scalajs.sjsirinterpreter.core.values._
 
 object Types {
 
-  implicit class TypeOps(val value: Type) extends AnyVal {
-    def <:<(other: Type)(implicit isSubclass: (ClassName, ClassName) => Boolean): Boolean =
-      isSubtype(value, other)(isSubclass)
-  }
-
   def zeroOf(tpe: Type): js.Any = tpe match {
     case BooleanType => false
     case CharType    => new CharInstance('\u0000')

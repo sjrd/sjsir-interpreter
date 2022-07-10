@@ -1,5 +1,7 @@
 package org.scalajs.sjsirinterpreter.core
 
+import scala.annotation.switch
+
 import scala.collection.mutable
 
 import scala.scalajs.js
@@ -20,15 +22,11 @@ import org.scalajs.sjsirinterpreter.core.ops._
 import org.scalajs.sjsirinterpreter.core.values._
 import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
-import Types.TypeOps
 import org.scalajs.linker.interface.ModuleInitializer
 
 /** Main execution engine */
 final class Executor(val interpreter: Interpreter) {
   import Executor._
-
-  implicit def isSubclass(subclass: ClassName, superclass: ClassName)(implicit pos: Position): Boolean =
-    interpreter.getClassInfo(subclass).isSubclass(interpreter.getClassInfo(superclass))
 
   val fieldsSymbol = js.Symbol("fields")
 
@@ -750,35 +748,51 @@ final class Executor(val interpreter: Interpreter) {
     case _ => throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()} at $pos")
   }
 
-  def evalIsInstanceOf(value: js.Any, t: Type)(implicit pos: Position): Boolean = (value: Any) match {
-    case null =>
-      false
-    case _: Boolean =>
-      BooleanType <:< t
-    case _: Byte =>
-      ByteType <:< t || ShortType <:< t || IntType <:< t || FloatType <:< t || DoubleType <:< t
-    case _: Short =>
-      ShortType <:< t || IntType <:< t || FloatType <:< t || DoubleType <:< t
-    case _: Int =>
-      IntType <:< t || FloatType <:< t || DoubleType <:< t
-    case _: Float =>
-      FloatType <:< t || DoubleType <:< t
-    case _: Double =>
-      DoubleType <:< t
-    case _: String =>
-      StringType <:< t
-    case () =>
-      UndefType <:< t
-    case _: LongInstance =>
-      LongType <:< t
-    case _: CharInstance =>
-      CharType <:< t
-    case Instance(value) =>
-      ClassType(value.className) <:< t
-    case array: ArrayInstance =>
-      ArrayType(array.typeRef) <:< t
-    case _ =>
-      ClassType(ObjectClass) <:< t
+  def evalIsInstanceOf(value: js.Any, t: Type)(implicit pos: Position): Boolean = {
+    val isSubclassFun: (ClassName, ClassName) => Boolean =
+      (left, right) => interpreter.getClassInfo(left).isSubclass(right)
+
+    def sub(left: Type, right: Type): Boolean =
+      isSubtype(left, right)(isSubclassFun)
+
+    (value: Any) match {
+      case null =>
+        false
+      case _: Boolean =>
+        sub(BooleanType, t)
+      case _: Double =>
+        (value: Any) match {
+          case _: Int =>
+            (value: Any) match {
+              case _: Byte =>
+                sub(ByteType, t) || sub(ShortType, t) || sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
+              case _: Short =>
+                sub(ShortType, t) || sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
+              case _: Float =>
+                sub(IntType, t) || sub(FloatType, t) || sub(DoubleType, t)
+              case _ =>
+                sub(IntType, t) || sub(DoubleType, t)
+            }
+          case _: Float =>
+            sub(FloatType, t) || sub(DoubleType, t)
+          case _ =>
+            sub(DoubleType, t)
+        }
+      case _: String =>
+        sub(StringType, t)
+      case () =>
+        sub(UndefType, t)
+      case _: LongInstance =>
+        sub(LongType, t)
+      case _: CharInstance =>
+        sub(CharType, t)
+      case Instance(value) =>
+        sub(ClassType(value.className), t)
+      case array: ArrayInstance =>
+        sub(ArrayType(array.typeRef), t)
+      case _ =>
+        sub(ClassType(ObjectClass), t)
+    }
   }
 
   private val classOfCache = mutable.Map.empty[TypeRef, js.Any]
@@ -865,6 +879,9 @@ final class Executor(val interpreter: Interpreter) {
   }
 
   private def isAssignableFrom(target: TypeRef, source: TypeRef)(implicit pos: Position): Boolean = {
+    def isSubclass(lhs: ClassName, rhs: ClassName): Boolean =
+      interpreter.getClassInfo(lhs).isSubclass(rhs)
+
     (target == source) || {
       (target, source) match {
         case (ClassRef(targetCls), ClassRef(sourceCls)) =>
@@ -872,7 +889,7 @@ final class Executor(val interpreter: Interpreter) {
         case (ClassRef(ObjectClass | SerializableClass | CloneableClass), ArrayTypeRef(_, _)) =>
           true
         case (target: ArrayTypeRef, source: ArrayTypeRef) =>
-          ArrayType(source) <:< ArrayType(target)
+          isSubtype(ArrayType(source), ArrayType(target))(isSubclass(_, _))
         case _ =>
           false
       }

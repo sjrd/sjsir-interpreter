@@ -53,14 +53,16 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   private var _ancestorsIncludingThis: List[ClassInfo] = null
   def ancestorsIncludingThis(implicit pos: Position): List[ClassInfo] = {
-    val superClassInfoOrObject =
-      superClass.orElse(if (className == ObjectClass) None else Some(interpreter.getClassInfo(ObjectClass)))
-    val parents = superClassInfoOrObject.fold(interfaces)(_ :: interfaces)
+    val parents = superClass.fold(interfaces)(_ :: interfaces)
     this :: parents.flatMap(_.ancestorsIncludingThis).distinct
   }
 
-  def isSubclass(that: ClassInfo)(implicit pos: Position): Boolean =
-    ancestorsIncludingThis.contains(that)
+  private var _ancestorsForSubclassLookup: Set[ClassName] = null
+  def ancestorsForSubclassLookup(implicit pos: Position): Set[ClassName] =
+    (ObjectClass :: ancestorsIncludingThis.map(_.className)).toSet
+
+  def isSubclass(that: ClassName)(implicit pos: Position): Boolean =
+    ancestorsForSubclassLookup.contains(that)
 
   /** Runs the given callback for each of the ancestor classes of this
    *  ClassInfo, from top (`j.l.Object`) to bottom (this ClassInfo).
@@ -281,7 +283,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   private def isMoreSpecific(left: TypeRef, right: TypeRef)(implicit pos: Position): Boolean = {
     def classIsMoreSpecific(leftCls: ClassName, rightCls: ClassName): Boolean =
-      leftCls != rightCls && interpreter.getClassInfo(leftCls).isSubclass(interpreter.getClassInfo(rightCls))
+      leftCls != rightCls && interpreter.getClassInfo(leftCls).isSubclass(rightCls)
 
     (left, right) match {
       case (ClassRef(leftCls), ClassRef(rightCls)) =>

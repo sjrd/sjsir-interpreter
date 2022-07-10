@@ -109,12 +109,22 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(IntLiteral(Int.MaxValue), Map(
+      assertInstance(IntLiteral(Short.MaxValue.toInt + 1), Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> true,
         LongType -> false,
         FloatType -> true,
+        DoubleType -> true,
+        BooleanType -> false
+      ))
+
+      assertInstance(IntLiteral(Int.MaxValue), Map(
+        ByteType -> false,
+        ShortType -> false,
+        IntType -> true,
+        LongType -> false,
+        FloatType -> false,
         DoubleType -> true,
         BooleanType -> false
       ))
