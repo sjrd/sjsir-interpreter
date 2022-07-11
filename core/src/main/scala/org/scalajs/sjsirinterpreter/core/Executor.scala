@@ -38,7 +38,10 @@ final class Executor(val interpreter: Interpreter) {
     ))
   }
 
-  private val stack = new Stack()
+  val stack = new Stack()
+
+  def getClassInfo(className: ClassName)(implicit pos: Position): ClassInfo =
+    interpreter.getClassInfo(className)
 
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
     for (classInfo <- classInfos) {
@@ -108,13 +111,13 @@ final class Executor(val interpreter: Interpreter) {
     eval(program)(Env.empty)
   }
 
-  private def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
+  def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
     applyMethodDefGeneric(interpreter.getClassInfo(className), methodName, namespace, receiver, args)
   }
 
-  private def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
+  def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
 
@@ -137,11 +140,14 @@ final class Executor(val interpreter: Interpreter) {
     }
 
     stack.enter(pos, methodInfo) {
+      val compiledBody = methodInfo.getCompiledBody {
+        interpreter.compiler.compile(methodInfo.methodDef.body.get)
+      }
       val methodDef = methodInfo.methodDef
       val innerEnv = methodDef.args.zip(args).foldLeft(Env.empty.setThis(receiver)) { (env, paramAndArg) =>
         env.bind(paramAndArg._1.name.name, paramAndArg._2)
       }
-      eval(methodDef.body.get)(innerEnv)
+      compiledBody.eval()(innerEnv)
     }
   }
 
@@ -413,7 +419,7 @@ final class Executor(val interpreter: Interpreter) {
 
     case CreateJSClass(className, captureValues) =>
       implicit val pos = program.pos
-      createJSClass(interpreter.getClassInfo(className), captureValues, env)
+      createJSClass(interpreter.getClassInfo(className), captureValues.map(eval(_)))
 
     case JSSuperConstructorCall(_) =>
       throw new AssertionError("JSSuperConstructorCall should never be called in eval loop")
@@ -532,7 +538,7 @@ final class Executor(val interpreter: Interpreter) {
       throw new AssertionError(s"unexpected Transient in eval at ${program.pos}")
   }
 
-  private def createNewInstance(classInfo: ClassInfo)(implicit pos: Position): Instance = {
+  def createNewInstance(classInfo: ClassInfo)(implicit pos: Position): Instance = {
     val jsClass = classInfo.getJSClass {
       val ctor = Instance.newInstanceClass(classInfo)
       setFunctionName(ctor, classInfo.classNameString)
@@ -553,14 +559,17 @@ final class Executor(val interpreter: Interpreter) {
     instance
   }
 
-  private def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
+  def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
     val ex = eval(New(cls, MethodIdent(stringArgCtor), List(StringLiteral(message))))(Env.empty)
     throw js.JavaScriptException(ex)
   }
 
-  def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] = {
+  def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] =
+    bindArgs(args, values.map(eval(_)))
+
+  def bindArgs(args: List[ParamDef], values: List[js.Any]): Map[LocalName, js.Any] = {
     assert(args.size == values.size, "argument and values list sizes don't match")
-    args.map(_.name.name).zip(values map eval).toMap
+    args.map(_.name.name).zip(values).toMap
   }
 
   def bindJSArgs(params: List[ParamDef], restParam: Option[ParamDef], values: Seq[js.Any]): Map[LocalName, js.Any] = {
@@ -657,6 +666,17 @@ final class Executor(val interpreter: Interpreter) {
     }: JSVarArgsThisFunction
   }
 
+  def createJSThisFunction(className: String, methodName: String,
+      params: List[ParamDef], restParam: Option[ParamDef], body: Nodes.Node)(
+      implicit env: Env, pos: Position): js.Any = {
+    { (thizz, args) =>
+      stack.enter(pos, className, methodName) {
+        val argsMap = bindJSArgs(params, restParam, args.toSeq)
+        body.eval()(env.bind(argsMap).setThis(thizz))
+      }
+    }: JSVarArgsThisFunction
+  }
+
   def createJSArrowFunction(className: String, methodName: String,
       params: List[ParamDef], restParam: Option[ParamDef], body: Tree)(
       implicit env: Env, pos: Position): js.Any = {
@@ -664,6 +684,17 @@ final class Executor(val interpreter: Interpreter) {
       stack.enter(pos, className, methodName) {
         val argsMap = bindJSArgs(params, restParam, args.toSeq)
         eval(body)(env.bind(argsMap))
+      }
+    }: JSVarArgsFunction
+  }
+
+  def createJSArrowFunction(className: String, methodName: String,
+      params: List[ParamDef], restParam: Option[ParamDef], body: Nodes.Node)(
+      implicit env: Env, pos: Position): js.Any = {
+    { (args) =>
+      stack.enter(pos, className, methodName) {
+        val argsMap = bindJSArgs(params, restParam, args.toSeq)
+        body.eval()(env.bind(argsMap))
       }
     }: JSVarArgsFunction
   }
@@ -731,7 +762,7 @@ final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  private def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
+  def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
     loadSpec match {
       case JSNativeLoadSpec.Global(ref, path) =>
         path.foldLeft(eval(JSGlobalRef(ref))(Env.empty)) { (prev, pathItem) =>
@@ -859,7 +890,7 @@ final class Executor(val interpreter: Interpreter) {
 
   private val classOfCache = mutable.Map.empty[TypeRef, js.Any]
 
-  private def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
+  def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
     classOfCache.getOrElseUpdate(typeRef, {
       val tmp = LocalName("dataTmp")
       eval(New(
@@ -1002,7 +1033,7 @@ final class Executor(val interpreter: Interpreter) {
   /* Generates JSClass value */
   def initJSClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
     classInfo.getJSClass {
-      createJSClass(classInfo, Nil, Env.empty)
+      createJSClass(classInfo, Nil)
     } { ctor =>
       // Run the class initializer, if any
       val clinitOpt = classInfo.maybeLookupStaticConstructor(ClassInitializerName)
@@ -1014,13 +1045,13 @@ final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def createJSClass(classInfo: ClassInfo, captureValues: List[Tree], topEnv: Env)(
+  def createJSClass(classInfo: ClassInfo, captureValues: List[js.Any])(
       implicit pos: Position): js.Dynamic = {
 
     val classDef = classInfo.classDef
 
     implicit val env = Env.empty.bind(
-      evalArgs(classDef.jsClassCaptures.getOrElse(Nil), captureValues)(topEnv)
+      bindArgs(classDef.jsClassCaptures.getOrElse(Nil), captureValues)
     )
 
     val ctorDef = classDef.memberDefs.find {
@@ -1137,28 +1168,28 @@ final class Executor(val interpreter: Interpreter) {
 
 object Executor {
   val ThrowableClass = ClassName("java.lang.Throwable")
-  private val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
-  private val StackTraceElementClass = ClassName("java.lang.StackTraceElement")
+  val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
+  val StackTraceElementClass = ClassName("java.lang.StackTraceElement")
 
-  private val BoxedStringRef = ClassRef(BoxedStringClass)
-  private val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
+  val BoxedStringRef = ClassRef(BoxedStringClass)
+  val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
 
-  private val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
+  val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
 
-  private val stackTraceElementCtor =
+  val stackTraceElementCtor =
     MethodName.constructor(List(BoxedStringRef, BoxedStringRef, BoxedStringRef, IntRef))
 
   val setStackTraceMethodName =
     MethodName("setStackTrace", List(StackTraceArrayTypeRef), VoidRef)
 
-  private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
+  val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
 
   val fillInStackTraceMethodName =
     MethodName("fillInStackTrace", Nil, ClassRef(ThrowableClass))
 
-  private val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)
+  val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)
 
-  private val numberCompareToMethodNames: Set[MethodName] = {
+  val numberCompareToMethodNames: Set[MethodName] = {
     val nonDoubleBoxedClasses = Set(
       BoxedByteClass,
       BoxedShortClass,

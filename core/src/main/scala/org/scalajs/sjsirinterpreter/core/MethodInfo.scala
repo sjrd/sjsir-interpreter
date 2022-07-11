@@ -14,4 +14,11 @@ private[core] final class MethodInfo(
 
   val isTheFillInStackTraceMethodName =
     owner.isTheThrowableClass && methodName == Executor.fillInStackTraceMethodName
+
+  private var compiledBody: Nodes.Node = null
+  def getCompiledBody(init: => Nodes.Node): Nodes.Node = {
+    if (compiledBody == null)
+      compiledBody = init
+    compiledBody
+  }
 }

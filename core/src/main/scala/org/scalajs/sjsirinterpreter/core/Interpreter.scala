@@ -16,7 +16,8 @@ final class Interpreter(val semantics: Semantics) {
   private var working: Boolean = false
 
   private val classInfos = mutable.Map.empty[ClassName, ClassInfo]
-  private[core] val executor = new Executor(this) // accessed by tests
+  private[core] val executor = new Executor(this)
+  private[core] val compiler = new Compiler(this)
 
   private def startWorking(): Unit = {
     if (working)
