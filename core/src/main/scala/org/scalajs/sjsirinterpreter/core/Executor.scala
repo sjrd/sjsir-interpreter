@@ -42,8 +42,9 @@ final class Executor(val interpreter: Interpreter) {
 
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
     for (classInfo <- classInfos) {
-      for (methodDef <- classInfo.maybeLookupStaticConstructor(StaticInitializerName)) {
-        stack.enter(NoPosition, classInfo.className, StaticInitializerName) {
+      for (methodInfo <- classInfo.maybeLookupStaticConstructor(StaticInitializerName)) {
+        stack.enter(NoPosition, methodInfo) {
+          val methodDef = methodInfo.methodDef
           assert(methodDef.args.isEmpty, s"static initializer for $classInfo has arguments ${methodDef.args}")
           execute(methodDef.body.get)
         }
@@ -117,9 +118,9 @@ final class Executor(val interpreter: Interpreter) {
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
 
-    val (actualClassInfo, methodDef) = classInfo.lookupMethod(namespace, methodName)
+    val methodInfo = classInfo.lookupMethod(namespace, methodName)
 
-    if (actualClassInfo.isTheThrowableClass && methodName == fillInStackTraceMethodName) {
+    if (methodInfo.isTheFillInStackTraceMethodName) {
       val th = receiver.get
       val stackTrace = stack.captureStackTrace(pos)
       val stackTraceElements = stackTrace.map { e =>
@@ -135,7 +136,8 @@ final class Executor(val interpreter: Interpreter) {
       applyMethodDefGeneric(ThrowableClass, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
     }
 
-    stack.enter(pos, actualClassInfo.className, methodName) {
+    stack.enter(pos, methodInfo) {
+      val methodDef = methodInfo.methodDef
       val innerEnv = methodDef.args.zip(args).foldLeft(Env.empty.setThis(receiver)) { (env, paramAndArg) =>
         env.bind(paramAndArg._1.name.name, paramAndArg._2)
       }
@@ -698,9 +700,8 @@ final class Executor(val interpreter: Interpreter) {
 
   def loadModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
     classInfo.getModuleClassInstance {
-      val className = classInfo.className
-      stack.enter(pos, className, ClassInitializerName) {
-        eval(New(className, MethodIdent(NoArgConstructorName), List()))(Env.empty).asInstanceOf[Instance]
+      stack.enter(pos, classInfo.classNameString, "<clinit>") {
+        eval(New(classInfo.className, MethodIdent(NoArgConstructorName), List()))(Env.empty).asInstanceOf[Instance]
       }
     }
   }
@@ -1005,9 +1006,9 @@ final class Executor(val interpreter: Interpreter) {
     } { ctor =>
       // Run the class initializer, if any
       val clinitOpt = classInfo.maybeLookupStaticConstructor(ClassInitializerName)
-      for (clinit <- clinitOpt) {
-        stack.enter(pos, classInfo.className, clinit.methodName) {
-          eval(clinit.body.get)(Env.empty)
+      for (clinitInfo <- clinitOpt) {
+        stack.enter(pos, clinitInfo) {
+          eval(clinitInfo.methodDef.body.get)(Env.empty)
         }
       }
     }
@@ -1152,7 +1153,7 @@ object Executor {
 
   private val toStringMethodName = MethodName("toString", Nil, ClassRef(BoxedStringClass))
 
-  private val fillInStackTraceMethodName =
+  val fillInStackTraceMethodName =
     MethodName("fillInStackTrace", Nil, ClassRef(ThrowableClass))
 
   private val doubleCompareToMethodName = MethodName("compareTo", List(ClassRef(BoxedDoubleClass)), IntRef)

@@ -21,6 +21,10 @@ final class Stack {
     enter(callSitePos, className.nameString, methodName)(body)
 
   @inline
+  def enter[A](callSitePos: Position, methodInfo: MethodInfo)(body: => A): A =
+    enter(callSitePos, methodInfo.ownerNameString, methodInfo.simpleMethodNameString)(body)
+
+  @inline
   def enter[A](callSitePos: Position, className: String, methodName: String)(body: => A): A = {
     val prevClassName = currentClassName
     val prevMethodName = currentMethodName

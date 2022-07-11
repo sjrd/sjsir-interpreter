@@ -102,49 +102,48 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     _instanceFieldDefs
   }
 
-  private var _directMethods: Array[mutable.Map[MethodName, MethodDef]] = null
-  private def directMethods(namespace: MemberNamespace): collection.Map[MethodName, MethodDef] = {
+  private var _directMethods: Array[mutable.Map[MethodName, MethodInfo]] = null
+  private def directMethods(namespace: MemberNamespace): collection.Map[MethodName, MethodInfo] = {
     if (_directMethods == null) {
       _directMethods = Array.fill(MemberNamespace.Count)(mutable.Map.empty)
       classDef.memberDefs.foreach {
         case m @ MethodDef(flags, MethodIdent(methodName), _, _, _, Some(_)) =>
-          _directMethods(flags.namespace.ordinal)(methodName) = m
+          _directMethods(flags.namespace.ordinal)(methodName) = new MethodInfo(this, methodName, m)
         case _ =>
           ()
       }
     }
     _directMethods(namespace.ordinal)
   }
-  private def directPublicMethods: collection.Map[MethodName, MethodDef] =
+  private def directPublicMethods: collection.Map[MethodName, MethodInfo] =
     directMethods(MemberNamespace.Public)
 
-  private val resolvedPublicMethods = mutable.Map.empty[MethodName, (ClassInfo, MethodDef)]
+  private val resolvedPublicMethods = mutable.Map.empty[MethodName, MethodInfo]
 
   def lookupMethod(namespace: MemberNamespace, methodName: MethodName)(
-      implicit pos: Position): (ClassInfo, MethodDef) = {
+      implicit pos: Position): MethodInfo = {
     if (namespace == MemberNamespace.Public) {
       lookupPublicMethod(methodName)
     } else {
-      val methodDef = directMethods(namespace).getOrElse(methodName, {
+      directMethods(namespace).getOrElse(methodName, {
         throw new AssertionError(
             s"Non existing method ${namespace.prefixString}${methodName.nameString} in $classNameString")
       })
-      (this, methodDef)
     }
   }
 
-  def lookupPublicMethod(methodName: MethodName)(implicit pos: Position): (ClassInfo, MethodDef) = {
+  def lookupPublicMethod(methodName: MethodName)(implicit pos: Position): MethodInfo = {
     resolvedPublicMethods.getOrElseUpdate(methodName, {
       resolvePublicMethod(methodName)
     })
   }
 
-  def maybeLookupStaticConstructor(ctorName: MethodName): Option[MethodDef] =
+  def maybeLookupStaticConstructor(ctorName: MethodName): Option[MethodInfo] =
     directMethods(MemberNamespace.StaticConstructor).get(ctorName)
 
   // Public method resolution -------------------------------------------------
 
-  private def resolvePublicMethod(methodName: MethodName)(implicit pos: Position): (ClassInfo, MethodDef) = {
+  private def resolvePublicMethod(methodName: MethodName)(implicit pos: Position): MethodInfo = {
     assert(!kind.isJSType,
         s"Cannot call resolvePublicMethod($methodName) on JS type $classNameString")
 
@@ -158,12 +157,12 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     }
   }
 
-  private def tryLookupMethod(methodName: MethodName)(implicit pos: Position): Option[(ClassInfo, MethodDef)] = {
+  private def tryLookupMethod(methodName: MethodName)(implicit pos: Position): Option[MethodInfo] = {
     @tailrec
-    def tryLookupInherited(ancestorInfo: ClassInfo): Option[(ClassInfo, MethodDef)] = {
+    def tryLookupInherited(ancestorInfo: ClassInfo): Option[MethodInfo] = {
       ancestorInfo.directPublicMethods.get(methodName) match {
-        case Some(m) =>
-          Some((ancestorInfo, m))
+        case m @ Some(_) =>
+          m
         case _ =>
           ancestorInfo.superClass match {
             case Some(superClass) => tryLookupInherited(superClass)
@@ -173,7 +172,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     }
 
     val inSuperClasses =
-      if (kind == Interface) directPublicMethods.get(methodName).map((this, _))
+      if (kind == Interface) directPublicMethods.get(methodName)
       else tryLookupInherited(this)
 
     inSuperClasses.orElse {
@@ -189,17 +188,17 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
    *  version 8, Section 6.5:
    *  https://docs.oracle.com/javase/specs/jvms/se8/html/jvms-6.html#jvms-6.5.invokespecial
    */
-  private def findDefaultTarget(methodName: MethodName)(implicit pos: Position): Option[(ClassInfo, MethodDef)] = {
+  private def findDefaultTarget(methodName: MethodName)(implicit pos: Position): Option[MethodInfo] = {
     val candidates = for {
       intf <- ancestorsIncludingThis if intf.kind == Interface
       m <- intf.directPublicMethods.get(methodName)
     } yield {
-      intf -> m
+      m
     }
 
     val notShadowed = candidates.filterNot { m =>
       candidates.exists { n =>
-        (n ne m) && n._1.ancestorsIncludingThis.contains(m._1)
+        (n ne m) && n.owner.ancestorsIncludingThis.contains(m.owner)
       }
     }
 
@@ -217,13 +216,13 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
        */
       throw new AssertionError(
           s"Ambiguous default methods for $classNameString.${methodName.nameString} with candidates in " +
-          notShadowed.map(_._1.classNameString).mkString(", "))
+          notShadowed.map(_.ownerNameString).mkString(", "))
     }
 
     notShadowed.headOption
   }
 
-  private def findReflectiveTarget(proxyName: MethodName)(implicit pos: Position): Option[(ClassInfo, MethodDef)] = {
+  private def findReflectiveTarget(proxyName: MethodName)(implicit pos: Position): Option[MethodInfo] = {
     /* The lookup for a target method in this code implements the
      * algorithm defining `java.lang.Class.getMethod`. This mimics how
      * reflective calls are implemented on the JVM, at link time.
@@ -243,14 +242,14 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
       Iterator.iterate(this)(_.superClass.orNull).takeWhile(_ ne null)
     val superClassesThenAncestors = superClasses ++ ancestorsIncludingThis.iterator
 
-    val candidates = superClassesThenAncestors.map(cls => cls.findProxyMatch(proxyName).map((cls, _)))
+    val candidates = superClassesThenAncestors.map(cls => cls.findProxyMatch(proxyName))
 
     candidates.collectFirst {
       case Some(m) => m
     }
   }
 
-  private def findProxyMatch(proxyName: MethodName)(implicit pos: Position): Option[MethodDef] = {
+  private def findProxyMatch(proxyName: MethodName)(implicit pos: Position): Option[MethodInfo] = {
     val candidates = directPublicMethods.valuesIterator.filter { m =>
       // TODO In theory we should filter out protected methods
       reflProxyMatches(m.methodName, proxyName)
