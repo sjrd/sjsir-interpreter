@@ -274,6 +274,68 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
   }
 
+  def compileJSClassDef(classInfo: ClassInfo): n.JSClassDef = {
+    val classDef = classInfo.classDef
+    implicit val pos = classDef.pos
+
+    assert(classInfo.kind.isJSClass, s"compileJSClassDef of non JS class $classInfo at $pos")
+
+    val classCaptures = classDef.jsClassCaptures.getOrElse(Nil)
+
+    val superClass = classDef.jsSuperClass match {
+      case Some(superClassTree) =>
+        compile(superClassTree)
+      case None =>
+        val superClassInfo = classInfo.superClass.getOrElse {
+          throw new AssertionError(s"No superclass for JS class $classInfo at $pos")
+        }
+        new n.LoadJSConstructor(superClassInfo.className)
+    }
+
+    val ctorDef = classDef.memberDefs.find {
+      case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
+      case _                                                     => false
+    }.getOrElse {
+      throw new AssertionError(s"Cannot find JS constructor in $classInfo at $pos")
+    }.asInstanceOf[JSMethodDef]
+
+    val (beforeSuperConstructorTrees, superConstructorArgTrees, afterSuperConstructorTrees) =
+      splitJSConstructor(ctorDef.body)
+
+    val beforeSuperConstructor = compileList(beforeSuperConstructorTrees)
+    val superConstructorArgs = compileExprOrJSSpreads(superConstructorArgTrees)
+    val afterSuperConstructor = compileList(afterSuperConstructorTrees)
+
+    new n.JSClassDef(
+      classInfo,
+      classCaptures,
+      superClass,
+      ctorDef.args,
+      ctorDef.restParam,
+      beforeSuperConstructor,
+      superConstructorArgs,
+      afterSuperConstructor,
+    )
+  }
+
+  private def splitJSConstructor(tree: Tree): (List[Tree], List[TreeOrJSSpread], List[Tree]) = {
+    tree match {
+      case JSSuperConstructorCall(args) =>
+        (Nil, args, Nil)
+
+      case Block(stats) =>
+        stats.span(!_.isInstanceOf[JSSuperConstructorCall]) match {
+          case (beforeSuperConstructor, JSSuperConstructorCall(superConstructorArgs) :: afterSuperConstructor) =>
+            (beforeSuperConstructor, superConstructorArgs, afterSuperConstructor)
+          case _ =>
+            throw new AssertionError(s"Cannot find the JSSuperConstructorCall at ${tree.pos}")
+        }
+
+      case _ =>
+        throw new AssertionError(s"Cannot find the JSSuperConstructorCall at ${tree.pos}")
+    }
+  }
+
   def compileJSFieldDef(fieldDef: JSFieldDef): n.JSFieldDef = {
     implicit val pos = fieldDef.pos
     new n.JSFieldDef(compile(fieldDef.name), Types.zeroOf(fieldDef.ftpe))

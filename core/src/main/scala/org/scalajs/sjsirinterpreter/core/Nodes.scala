@@ -2,6 +2,8 @@ package org.scalajs.sjsirinterpreter.core
 
 import scala.annotation.switch
 
+import scala.collection.mutable
+
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.runtime.toScalaVarArgs // TODO Can we avoid this?
@@ -804,6 +806,90 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any =
       executor.createJSClass(executor.getClassInfo(className), captureValues.map(_.eval()))
+  }
+
+  // JS class definitions
+
+  final class JSClassDef(
+    classInfo: ClassInfo,
+    classCaptures: List[Trees.ParamDef],
+    superClass: Node,
+    constructorParams: List[Trees.ParamDef],
+    constructorRestParam: Option[Trees.ParamDef],
+    beforeSuperConstructor: List[Node],
+    superConstructorArgs: List[NodeOrJSSpread],
+    afterSuperConstructor: List[Node],
+  )(implicit val executor: Executor, val pos: Position) {
+
+    def createClass(classCaptureValues: List[js.Any]): js.Dynamic = {
+      implicit val env = Env.empty.bind(executor.bindArgs(classCaptures, classCaptureValues))
+
+      val superClassValue = superClass.eval()
+      val parents = js.Dynamic.literal(ParentClass = superClassValue).asInstanceOf[RawParents]
+
+      @inline
+      def evalBeforeSuper(newTarget: js.Any, args: Seq[js.Any]): Env = {
+        val argsMap = executor.bindJSArgs(constructorParams, constructorRestParam, args)
+        evalStatements(beforeSuperConstructor, env.setNewTarget(newTarget).bind(argsMap))
+      }
+
+      @inline
+      def evalSuperArgs(env: Env): Seq[js.Any] =
+        toScalaVarArgs(evalJSArgList(superConstructorArgs)(env))
+
+      @inline
+      def evalAfterSuper(thiz: js.Any, env: Env): Unit = {
+        attachFields(thiz.asInstanceOf[js.Object])(env, pos)
+        evalStatements(afterSuperConstructor, env.setThis(thiz))
+      }
+
+      class Subclass(preSuperEnv: Env) extends parents.ParentClass(evalSuperArgs(preSuperEnv): _*) {
+        def this(args: js.Any*) = this(evalBeforeSuper(js.`new`.target, args))
+        evalAfterSuper(this, preSuperEnv)
+      }
+      val ctor = js.constructorOf[Subclass]
+      executor.setFunctionName(ctor, classInfo.classNameString)
+
+      for (staticDef <- classInfo.getCompiledStaticJSMemberDefs())
+        staticDef.createOn(ctor)
+      for (methodPropDef <- classInfo.getCompiledJSMethodPropDefs())
+        methodPropDef.createOn(ctor.prototype)
+
+      ctor
+    }
+
+    private def attachFields(target: js.Any)(implicit env: Env, pos: Position): Unit = {
+      if (classInfo.instanceFieldDefs.nonEmpty) {
+        val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(executor.fieldsSymbol)
+        val fields = if (js.isUndefined(existing)) {
+          val fields: Instance.Fields = mutable.Map.empty
+          val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
+          js.Dynamic.global.Object.defineProperty(target, executor.fieldsSymbol, descriptor)
+          fields
+        } else {
+          existing.asInstanceOf[Instance.Fields]
+        }
+
+        classInfo.instanceFieldDefs.foreach {
+          case Trees.FieldDef(flags, Trees.FieldIdent(fieldName), originalName, tpe) =>
+            fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
+        }
+      }
+
+      for (fieldDef <- classInfo.getCompiledJSFieldDefs())
+        fieldDef.createOn(target)
+    }
+  }
+
+  private def evalStatements(stats: List[Node], initialEnv: Env): Env = {
+    var runningEnv: Env = initialEnv
+    stats.foreach {
+      case varDef: VarDef =>
+        runningEnv = runningEnv.bind(varDef.name, varDef.rhs.eval()(runningEnv))
+      case stat =>
+        stat.eval()(runningEnv)
+    }
+    runningEnv
   }
 
   // Exported member definitions

@@ -989,25 +989,6 @@ final class Executor(val interpreter: Interpreter) {
       isArrayClass = isArrayClass
     )
 
-  /** Split constructor body into prelude, args tree and epilog
-   * This function automatically checks invariant (either):
-   * - JSSuperConstructorCall(args)
-   * - Block(..., JSSuperConstructorCall(args), ...)
-  */
-  def splitJSConstructor(tree: Tree): (List[Tree], List[TreeOrJSSpread], List[Tree]) = tree match {
-    case JSSuperConstructorCall(args) => (Nil, args, Nil)
-    case Block(stmts) =>
-      val ctor = stmts.find {
-        case JSSuperConstructorCall(_) => true
-        case _ => false
-      }.getOrThrow("Invariant violation: JSConstructor block doesn't have JSSuperConstructorCall")
-        .asInstanceOf[JSSuperConstructorCall]
-      val (prelude, _::epilog) = stmts.splitAt(stmts.indexOf(ctor))
-      (prelude, ctor.args, epilog)
-    case _ =>
-      throw new AssertionError("Invariant violation: JSConstructor is neither Block nor JSSuperConstructorCall")
-  }
-
   /* Generates JSClass value */
   def initJSClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
     classInfo.getJSClass {
@@ -1025,79 +1006,12 @@ final class Executor(val interpreter: Interpreter) {
 
   def createJSClass(classInfo: ClassInfo, captureValues: List[js.Any])(
       implicit pos: Position): js.Dynamic = {
-
-    val classDef = classInfo.classDef
-
-    implicit val env = Env.empty.bind(
-      bindArgs(classDef.jsClassCaptures.getOrElse(Nil), captureValues)
-    )
-
-    val ctorDef = classDef.memberDefs.find {
-      case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
-      case _ => false
-    }.getOrThrow(s"Cannot find JS constructor in $classInfo").asInstanceOf[JSMethodDef]
-
-    val (preludeTree, superArgs, epilogTree) = splitJSConstructor(ctorDef.body)
-
-    val superClass = classDef.jsSuperClass.map(eval).orElse {
-      classInfo.superClass.map(loadJSConstructor)
-    }.getOrThrow("JSClass must have a super class").asInstanceOf[js.Dynamic]
-
-    val parents = js.Dynamic.literal(ParentClass = superClass).asInstanceOf[RawParents]
-
-    def preSuperStatements(newTarget: js.Any, args: Seq[js.Any]): Env = {
-      val argsMap = bindJSArgs(ctorDef.args, ctorDef.restParam, args)
-      evalStmts(preludeTree)(env.setNewTarget(newTarget).bind(argsMap))._2
-    }
-
-    def evalSuperArgs(env: Env): Seq[js.Any] =
-      evalSpread(superArgs)(env).toSeq
-
-    def postSuperStatements(thiz: js.Any, env: Env): Unit = {
-      attachFields(thiz.asInstanceOf[js.Object], classInfo)(env, pos)
-      evalStmts(epilogTree)(env.setThis(thiz))
-    }
-
-    class Subclass(preSuperEnv: Env) extends parents.ParentClass(evalSuperArgs(preSuperEnv): _*) {
-      def this(args: js.Any*) = this(preSuperStatements(js.`new`.target, args))
-      postSuperStatements(this, preSuperEnv)
-    }
-    val ctor = js.constructorOf[Subclass]
-    setFunctionName(ctor, classInfo.classNameString)
-
-    for (staticDef <- classInfo.getCompiledStaticJSMemberDefs())
-      staticDef.createOn(ctor)
-    for (methodPropDef <- classInfo.getCompiledJSMethodPropDefs())
-      methodPropDef.createOn(ctor.prototype)
-
-    ctor
+    classInfo.getCompiledJSClassDef().createClass(captureValues)
   }
 
   def setFunctionName(f: js.Any, name: String): Unit = {
     js.Object.defineProperty(f.asInstanceOf[js.Object], "name",
         Descriptor.make(configurable = true, false, false, name))
-  }
-
-  def attachFields(target: js.Any, classInfo: ClassInfo)(implicit env: Env, pos: Position): Unit = {
-    if (classInfo.instanceFieldDefs.nonEmpty) {
-      val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
-      val fields = if (js.isUndefined(existing)) {
-        val fields: Instance.Fields = mutable.Map.empty
-        val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
-        js.Dynamic.global.Object.defineProperty(target, fieldsSymbol, descriptor)
-        fields
-      } else {
-        existing.asInstanceOf[Instance.Fields]
-      }
-
-      classInfo.instanceFieldDefs.foreach {
-        case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
-          fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
-      }
-    }
-
-    for (fieldDef <- classInfo.getCompiledJSFieldDefs())
-      fieldDef.createOn(target)
   }
 }
 

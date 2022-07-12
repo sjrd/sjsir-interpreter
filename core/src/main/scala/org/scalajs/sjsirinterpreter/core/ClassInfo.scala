@@ -310,6 +310,13 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def runtimeClassName: String =
     interpreter.runtimeClassName(classNameString)
 
+  private var compiledJSClassDef: Nodes.JSClassDef = null
+  def getCompiledJSClassDef()(implicit pos: Position): Nodes.JSClassDef = {
+    if (compiledJSClassDef == null)
+      compiledJSClassDef = interpreter.compiler.compileJSClassDef(this)
+    compiledJSClassDef
+  }
+
   private var compiledStaticJSMemberDefs: List[Nodes.JSMemberDef] = null
   def getCompiledStaticJSMemberDefs()(implicit pos: Position): List[Nodes.JSMemberDef] = {
     if (compiledStaticJSMemberDefs == null) {
