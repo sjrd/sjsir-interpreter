@@ -37,24 +37,5 @@ object ObjectTests extends TestSuite{
         JSSelect(VarRef(LocalIdent(x))(AnyType), StringLiteral("b"))
       )) ==> js.undefined
     }
-
-    test("property descriptor") {
-      val obj = js.Dynamic.literal(x = 10)
-      val selector = JSSelect(This()(AnyType), StringLiteral("x"))
-      val descriptor = executor.createJSPropertyDescriptor("Anon", "y", JSPropertyDef(
-        MemberFlags.empty,
-        StringLiteral("y"),
-        Some(JSUnaryOp(JSUnaryOp.-, selector)),
-        Some((
-          ParamDef(LocalIdent(LocalName("value")), OriginalName.NoOriginalName, AnyType, false),
-          Assign(selector, VarRef(LocalIdent(LocalName("value")))(AnyType))
-        ))
-      ))
-      js.Object.defineProperty(obj, "y", descriptor)
-      val dynObj = obj.asInstanceOf[js.Dynamic]
-      dynObj.selectDynamic("y") ==> -10
-      dynObj.updateDynamic("y")(1)
-      dynObj.selectDynamic("y") ==> -1
-    }
   }
 }

@@ -92,11 +92,11 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   private val staticFieldMirrors = mutable.Map.empty[FieldName, List[String]]
 
-  private var _instanceFieldDefs: List[AnyFieldDef] = null
-  def instanceFieldDefs: List[AnyFieldDef] = {
+  private var _instanceFieldDefs: List[FieldDef] = null
+  def instanceFieldDefs: List[FieldDef] = {
     if (_instanceFieldDefs == null) {
       _instanceFieldDefs = classDef.memberDefs.collect {
-        case f: AnyFieldDef if !f.flags.namespace.isStatic => f
+        case f: FieldDef if !f.flags.namespace.isStatic => f
       }
     }
     _instanceFieldDefs
@@ -309,6 +309,54 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   def runtimeClassName: String =
     interpreter.runtimeClassName(classNameString)
+
+  private var compiledStaticJSMemberDefs: List[Nodes.JSMemberDef] = null
+  def getCompiledStaticJSMemberDefs()(implicit pos: Position): List[Nodes.JSMemberDef] = {
+    if (compiledStaticJSMemberDefs == null) {
+      val compiler = interpreter.compiler
+      compiledStaticJSMemberDefs = classDef.memberDefs.collect {
+        case fieldDef: JSFieldDef if fieldDef.flags.namespace.isStatic =>
+          compiler.compileJSFieldDef(fieldDef)
+        case methodDef: JSMethodDef if methodDef.flags.namespace.isStatic =>
+          compiler.compileJSMethodDef(this, methodDef)
+        case propertyDef: JSPropertyDef if propertyDef.flags.namespace.isStatic =>
+          compiler.compileJSPropertyDef(this, propertyDef)
+      }
+    }
+    compiledStaticJSMemberDefs
+  }
+
+  private var compiledJSFieldDefs: List[Nodes.JSFieldDef] = null
+  def getCompiledJSFieldDefs()(implicit pos: Position): List[Nodes.JSFieldDef] = {
+    if (compiledJSFieldDefs == null) {
+      val compiler = interpreter.compiler
+      compiledJSFieldDefs = classDef.memberDefs.collect {
+        case fieldDef: JSFieldDef if !fieldDef.flags.namespace.isStatic =>
+          compiler.compileJSFieldDef(fieldDef)
+      }
+    }
+    compiledJSFieldDefs
+  }
+
+  private var compiledJSMethodPropDefs: List[Nodes.JSMethodOrPropertyDef] = null
+  def getCompiledJSMethodPropDefs()(implicit pos: Position): List[Nodes.JSMethodOrPropertyDef] = {
+    def isJSConstructorDef(methodDef: JSMethodDef): Boolean = {
+      kind.isJSClass && (methodDef.name match {
+        case StringLiteral("constructor") => true
+        case _                            => false
+      })
+    }
+    if (compiledJSMethodPropDefs == null) {
+      val compiler = interpreter.compiler
+      compiledJSMethodPropDefs = classDef.memberDefs.collect {
+        case methodDef: JSMethodDef if !methodDef.flags.namespace.isStatic && !isJSConstructorDef(methodDef) =>
+          compiler.compileJSMethodDef(this, methodDef)
+        case propertyDef: JSPropertyDef if !propertyDef.flags.namespace.isStatic =>
+          compiler.compileJSPropertyDef(this, propertyDef)
+      }
+    }
+    compiledJSMethodPropDefs
+  }
 
   private var jsClass: js.Dynamic = null
   def getJSClass(create: => js.Dynamic)(init: js.Dynamic => Unit): js.Dynamic = {

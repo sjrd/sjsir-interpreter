@@ -273,4 +273,24 @@ private[core] final class Compiler(interpreter: Interpreter) {
             s"Unexpected tree of type ${expr.getClass().getSimpleName()}  at $pos")
     }
   }
+
+  def compileJSFieldDef(fieldDef: JSFieldDef): n.JSFieldDef = {
+    implicit val pos = fieldDef.pos
+    new n.JSFieldDef(compile(fieldDef.name), Types.zeroOf(fieldDef.ftpe))
+  }
+
+  def compileJSMethodDef(owner: ClassInfo, methodDef: JSMethodDef): n.JSMethodDef = {
+    implicit val pos = methodDef.pos
+    new n.JSMethodDef(owner, compile(methodDef.name),
+        methodDef.args, methodDef.restParam, compile(methodDef.body))
+  }
+
+  def compileJSPropertyDef(owner: ClassInfo, propertyDef: JSPropertyDef): n.JSPropertyDef = {
+    implicit val pos = propertyDef.pos
+    new n.JSPropertyDef(owner, compile(propertyDef.name),
+        propertyDef.getterBody.map(compile(_)),
+        propertyDef.setterArgAndBody.map {
+          case (paramDef, body) => (paramDef, compile(body))
+        })
+  }
 }

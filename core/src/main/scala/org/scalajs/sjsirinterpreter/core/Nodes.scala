@@ -3,6 +3,7 @@ package org.scalajs.sjsirinterpreter.core
 import scala.annotation.switch
 
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters._
 import scala.scalajs.runtime.toScalaVarArgs // TODO Can we avoid this?
 
 import org.scalajs.ir.Names._
@@ -803,5 +804,76 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any =
       executor.createJSClass(executor.getClassInfo(className), captureValues.map(_.eval()))
+  }
+
+  // Exported member definitions
+
+  sealed abstract class JSMemberDef()(
+      implicit val executor: Executor, val pos: Position) {
+
+    def createOn(target: js.Any)(implicit env: Env): Unit
+  }
+
+  final class JSFieldDef(name: Node, initialValue: js.Any)(
+      implicit executor: Executor, pos: Position)
+      extends JSMemberDef {
+
+    def createOn(target: js.Any)(implicit env: Env): Unit = {
+      val fieldName = name.eval()
+      val descriptor = new js.PropertyDescriptor {
+        configurable = true
+        enumerable = true
+        writable = true
+        value = initialValue
+      }
+      js.Dynamic.global.Object.defineProperty(target, fieldName, descriptor)
+    }
+  }
+
+  sealed abstract class JSMethodOrPropertyDef()(
+      implicit executor: Executor, pos: Position)
+      extends JSMemberDef
+
+  final class JSMethodDef(owner: ClassInfo, name: Node,
+      params: List[Trees.ParamDef], restParam: Option[Trees.ParamDef], body: Node)(
+      implicit executor: Executor, pos: Position)
+      extends JSMethodOrPropertyDef {
+
+    def createOn(target: js.Any)(implicit env: Env): Unit = {
+      val methodName = name.eval()
+      val methodBody = executor.createJSThisFunction(
+          owner.classNameString, methodName.toString(), params, restParam, body)
+      target.asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
+    }
+  }
+
+  final class JSPropertyDef(owner: ClassInfo, name: Node,
+      getterBody: Option[Node], setterArgAndBody: Option[(Trees.ParamDef, Node)])(
+      implicit executor: Executor, pos: Position)
+      extends JSMethodOrPropertyDef {
+
+    def createOn(target: js.Any)(implicit env: Env): Unit = {
+      val propName = name.eval()
+      val classNameString = owner.classNameString
+      val propNameString = propName.toString()
+
+      val getterFun = getterBody.map { body =>
+        executor.createJSThisFunction(classNameString, propNameString, Nil, None, body)
+          .asInstanceOf[js.Function0[scala.Any]]
+      }.orUndefined
+
+      val setterFun = setterArgAndBody.map { argAndBody =>
+        executor.createJSThisFunction(classNameString, propNameString, argAndBody._1 :: Nil, None, argAndBody._2)
+          .asInstanceOf[js.Function1[scala.Any, scala.Any]]
+      }.orUndefined
+
+      val descriptor = new js.PropertyDescriptor {
+        configurable = true
+        enumerable = false
+        get = getterFun
+        set = setterFun
+      }
+      js.Dynamic.global.Object.defineProperty(target, propName, descriptor)
+    }
   }
 }

@@ -5,7 +5,6 @@ import scala.annotation.switch
 import scala.collection.mutable
 
 import scala.scalajs.js
-import scala.scalajs.js.JSConverters._
 import scala.scalajs.LinkingInfo
 
 import org.scalajs.ir.Trees._
@@ -549,10 +548,9 @@ final class Executor(val interpreter: Interpreter) {
       superclassInfo.instanceFieldDefs.foreach {
         case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
           instance.setField((superclassInfo.className, fieldName), Types.zeroOf(tpe))
-        case JSFieldDef(flags, name, ftpe) =>
-          throw new AssertionError("Trying to init JSField on a Scala class")
       }
-      attachExportedMembers(instance, staticTarget = null, superclassInfo)(Env.empty)
+      for (methodPropDef <- superclassInfo.getCompiledJSMethodPropDefs())
+        methodPropDef.createOn(instance)(Env.empty)
     }
     instance
   }
@@ -704,29 +702,6 @@ final class Executor(val interpreter: Interpreter) {
         body.eval()(env.bind(argsMap))
       }
     }: JSVarArgsFunction
-  }
-
-  def createJSPropGetter(className: String, propNameString: String, t: Tree)(
-      implicit env: Env, pos: Position): js.Function0[scala.Any] = {
-    createJSThisFunction(className, propNameString, Nil, None, t)
-      .asInstanceOf[js.Function0[scala.Any]]
-  }
-
-  def createJSPropSetter(className: String, propNameString: String, t: (ParamDef, Tree))(
-      implicit env: Env, pos: Position): js.Function1[scala.Any, scala.Any] = {
-    createJSThisFunction(className, propNameString, List(t._1), None, t._2)
-      .asInstanceOf[js.Function1[scala.Any, scala.Any]]
-  }
-
-  def createJSPropertyDescriptor(className: String, propNameString: String, desc: JSPropertyDef)(
-      implicit env: Env): js.PropertyDescriptor = {
-    implicit val pos = desc.pos
-    new js.PropertyDescriptor {
-      configurable = true
-      enumerable = false
-      get = desc.getterBody.map(createJSPropGetter(className, propNameString, _)).orUndefined
-      set = desc.setterArgAndBody.map(createJSPropSetter(className, propNameString, _)).orUndefined
-    }
   }
 
   def loadModuleGeneric(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
@@ -1079,7 +1054,7 @@ final class Executor(val interpreter: Interpreter) {
       evalSpread(superArgs)(env).toSeq
 
     def postSuperStatements(thiz: js.Any, env: Env): Unit = {
-      attachFields(thiz.asInstanceOf[js.Object], classInfo)(env)
+      attachFields(thiz.asInstanceOf[js.Object], classInfo)(env, pos)
       evalStmts(epilogTree)(env.setThis(thiz))
     }
 
@@ -1089,7 +1064,12 @@ final class Executor(val interpreter: Interpreter) {
     }
     val ctor = js.constructorOf[Subclass]
     setFunctionName(ctor, classInfo.classNameString)
-    attachExportedMembers(ctor.prototype, ctor, classInfo)
+
+    for (staticDef <- classInfo.getCompiledStaticJSMemberDefs())
+      staticDef.createOn(ctor)
+    for (methodPropDef <- classInfo.getCompiledJSMethodPropDefs())
+      methodPropDef.createOn(ctor.prototype)
+
     ctor
   }
 
@@ -1098,74 +1078,26 @@ final class Executor(val interpreter: Interpreter) {
         Descriptor.make(configurable = true, false, false, name))
   }
 
-  def attachExportedMembers(targetObject: js.Any, staticTarget: js.Any, classInfo: ClassInfo)(
-      implicit env: Env): Unit = {
-    val classNameString = classInfo.classNameString
-
-    def targetForFlags(flags: MemberFlags): js.Any =
-      if (flags.namespace.isStatic) staticTarget
-      else targetObject
-
-    if (staticTarget != null) {
-      classInfo.classDef.memberDefs.foreach {
-        case f @ JSFieldDef(flags, name, ftpe) if flags.namespace.isStatic =>
-          implicit val pos = f.pos
-          val fieldName = eval(name)
-          val descriptor = Descriptor.make(true, true, true, Types.zeroOf(ftpe))
-          js.Dynamic.global.Object.defineProperty(staticTarget, fieldName, descriptor)
-
-        case _ =>
-          ()
-      }
-    }
-
-    classInfo.classDef.memberDefs.foreach {
-      case JSMethodDef(flags, StringLiteral("constructor"), _, _, _)
-          if flags.namespace == MemberNamespace.Public && classInfo.kind.isJSClass =>
-        /* Don't reassign the `constructor`. This is already done by virtue of
-         * how we create the `class`.
-         */
-        ()
-
-      case m @ JSMethodDef(flags, name, args, restParam, body) =>
-        implicit val pos = m.pos
-        val methodName = eval(name)
-        val methodBody = createJSThisFunction(classNameString, methodName.toString(), args, restParam, body)
-        targetForFlags(flags).asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
-
-      case descriptor @ JSPropertyDef(flags, name, _, _) =>
-        val prop = eval(name)
-        val desc = createJSPropertyDescriptor(classNameString, prop.toString(), descriptor)
-        js.Dynamic.global.Object.defineProperty(targetForFlags(flags), prop, desc)
-
-      case _ =>
-        ()
-    }
-  }
-
-  def attachFields(obj: js.Object, classInfo: ClassInfo)(implicit env: Env) = {
-    val fields: Instance.Fields = if (classInfo.instanceFieldDefs.exists(_.isInstanceOf[FieldDef])) {
-      val existing = obj.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
-      if (js.isUndefined(existing)) {
+  def attachFields(target: js.Any, classInfo: ClassInfo)(implicit env: Env, pos: Position): Unit = {
+    if (classInfo.instanceFieldDefs.nonEmpty) {
+      val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(fieldsSymbol)
+      val fields = if (js.isUndefined(existing)) {
         val fields: Instance.Fields = mutable.Map.empty
         val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
-        js.Dynamic.global.Object.defineProperty(obj, fieldsSymbol, descriptor)
+        js.Dynamic.global.Object.defineProperty(target, fieldsSymbol, descriptor)
         fields
       } else {
         existing.asInstanceOf[Instance.Fields]
       }
-    } else {
-      null
+
+      classInfo.instanceFieldDefs.foreach {
+        case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
+          fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
+      }
     }
 
-    classInfo.instanceFieldDefs.foreach {
-      case JSFieldDef(flags, name, tpe) =>
-        val field = eval(name)
-        val descriptor = Descriptor.make(true, true, true, Types.zeroOf(tpe))
-        js.Dynamic.global.Object.defineProperty(obj, field, descriptor)
-      case FieldDef(flags, FieldIdent(fieldName), originalName, tpe) =>
-        fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
-    }
+    for (fieldDef <- classInfo.getCompiledJSFieldDefs())
+      fieldDef.createOn(target)
   }
 }
 
