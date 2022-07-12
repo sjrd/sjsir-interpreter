@@ -46,10 +46,9 @@ final class Executor(val interpreter: Interpreter) {
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
     for (classInfo <- classInfos) {
       for (methodInfo <- classInfo.maybeLookupStaticConstructor(StaticInitializerName)) {
-        stack.enter(NoPosition, methodInfo) {
-          val methodDef = methodInfo.methodDef
-          assert(methodDef.args.isEmpty, s"static initializer for $classInfo has arguments ${methodDef.args}")
-          execute(methodDef.body.get)
+        implicit val pos = methodInfo.methodDef.pos
+        stack.enter(pos, methodInfo) {
+          applyMethodDefGeneric(methodInfo, None, Nil)
         }
       }
     }
@@ -94,21 +93,17 @@ final class Executor(val interpreter: Interpreter) {
       impl match {
         case MainMethodWithArgs(className, methodName, args) =>
           stack.enter(pos, className, "<module-initializer>") {
-            val argArray = ArrayValue(arrayOfStringTypeRef, args.map(StringLiteral(_)))
-            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), List(argArray))(NoType)
-            execute(tree)
+            val classInfo = getClassInfo(className)
+            val argArray = ArrayInstance.fromList(arrayOfStringTypeRef, args.map(s => s: js.Any))
+            applyMethodDefGeneric(classInfo, methodName, MemberNamespace.PublicStatic, None, List(argArray))
           }
         case VoidMainMethod(className, methodName) =>
           stack.enter(pos, className, "<module-initializer>") {
-            val tree = ApplyStatic(ApplyFlags.empty, className, MethodIdent(methodName), Nil)(NoType)
-            execute(tree)
+            val classInfo = getClassInfo(className)
+            applyMethodDefGeneric(classInfo, methodName, MemberNamespace.PublicStatic, None, Nil)
           }
       }
     }
-  }
-
-  def execute(program: Tree): Unit = {
-    eval(program)(Env.empty)
   }
 
   def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
@@ -120,20 +115,23 @@ final class Executor(val interpreter: Interpreter) {
   def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
+    applyMethodDefGeneric(classInfo.lookupMethod(namespace, methodName), receiver, args)
+  }
 
-    val methodInfo = classInfo.lookupMethod(namespace, methodName)
+  def applyMethodDefGeneric(methodInfo: MethodInfo, receiver: Option[js.Any], args: List[js.Any])(
+      implicit pos: Position): js.Any = {
 
     if (methodInfo.isTheFillInStackTraceMethodName) {
       val th = receiver.get
       val stackTrace = stack.captureStackTrace(pos)
       val stackTraceElements = stackTrace.map { e =>
-        val args = List(
-          if (e.className == null) StringLiteral("<jscode>") else StringLiteral(e.className),
-          if (e.methodName == null) StringLiteral("<jscode>") else StringLiteral(e.methodName),
-          if (e.pos.isEmpty) Null() else StringLiteral(e.pos.source.toASCIIString()),
-          if (e.pos.isEmpty) IntLiteral(-1) else IntLiteral(e.pos.line),
+        val args: List[js.Any] = List(
+          if (e.className == null) "<jscode>" else e.className,
+          if (e.methodName == null) "<jscode>" else e.methodName,
+          if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
+          if (e.pos.isEmpty) -1 else e.pos.line,
         )
-        eval(New(StackTraceElementClass, MethodIdent(stackTraceElementCtor), args))(Env.empty)
+        newInstanceWithConstructor(StackTraceElementClass, stackTraceElementCtor, args)
       }
       val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
       applyMethodDefGeneric(ThrowableClass, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
@@ -352,7 +350,7 @@ final class Executor(val interpreter: Interpreter) {
       throw new AssertionError("Trying to debug undebuggable? :)")
 
     case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
-      val capturesEnv = Env.empty.bind(evalArgs(captureParams, captureValues))
+      val capturesEnv = Env.empty.bind(bindArgs(captureParams, captureValues.map(eval(_))))
       val pos = program.pos
       if (arrow)
         createJSArrowFunction(stack.currentClassName, "<jscode>", params, restParam, body)(capturesEnv, pos)
@@ -559,13 +557,22 @@ final class Executor(val interpreter: Interpreter) {
     instance
   }
 
-  def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
-    val ex = eval(New(cls, MethodIdent(stringArgCtor), List(StringLiteral(message))))(Env.empty)
-    throw js.JavaScriptException(ex)
+  def newInstanceWithConstructor(className: ClassName, ctor: MethodName, args: List[js.Any])(
+      implicit pos: Position): Instance = {
+    newInstanceWithConstructor(getClassInfo(className), ctor, args)
   }
 
-  def evalArgs(args: List[ParamDef], values: List[Tree])(implicit env: Env): Map[LocalName, js.Any] =
-    bindArgs(args, values.map(eval(_)))
+  def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodName, args: List[js.Any])(
+      implicit pos: Position): Instance = {
+    val instance = createNewInstance(classInfo)
+    applyMethodDefGeneric(classInfo, ctor, MemberNamespace.Constructor, Some(instance), args)
+    instance
+  }
+
+  def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
+    val ex = newInstanceWithConstructor(cls, stringArgCtor, List(message))
+    throw js.JavaScriptException(ex)
+  }
 
   def bindArgs(args: List[ParamDef], values: List[js.Any]): Map[LocalName, js.Any] = {
     assert(args.size == values.size, "argument and values list sizes don't match")
@@ -732,7 +739,7 @@ final class Executor(val interpreter: Interpreter) {
   def loadModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
     classInfo.getModuleClassInstance {
       stack.enter(pos, classInfo.classNameString, "<clinit>") {
-        eval(New(classInfo.className, MethodIdent(NoArgConstructorName), List()))(Env.empty).asInstanceOf[Instance]
+        newInstanceWithConstructor(classInfo, NoArgConstructorName, Nil)
       }
     }
   }
@@ -765,7 +772,7 @@ final class Executor(val interpreter: Interpreter) {
   def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
     loadSpec match {
       case JSNativeLoadSpec.Global(ref, path) =>
-        path.foldLeft(eval(JSGlobalRef(ref))(Env.empty)) { (prev, pathItem) =>
+        path.foldLeft(getJSGlobalRef(ref)) { (prev, pathItem) =>
           prev.asInstanceOf[RawJSValue].jsPropertyGet(pathItem)
         }
       case JSNativeLoadSpec.Import(_, _) =>
@@ -892,12 +899,8 @@ final class Executor(val interpreter: Interpreter) {
 
   def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
     classOfCache.getOrElseUpdate(typeRef, {
-      val tmp = LocalName("dataTmp")
-      eval(New(
-        ClassClass,
-        MethodIdent(MethodName(ConstructorSimpleName, List(ClassRef(ObjectClass)), VoidRef)),
-        List(VarRef(LocalIdent(tmp))(AnyType))
-      ))(Env.empty.bind(tmp, genTypeData(typeRef))).asInstanceOf[Instance]
+      val typeData = genTypeData(typeRef)
+      newInstanceWithConstructor(ClassClass, anyArgCtor, List(typeData))
     })
   }
 
@@ -1077,7 +1080,7 @@ final class Executor(val interpreter: Interpreter) {
 
     def postSuperStatements(thiz: js.Any, env: Env): Unit = {
       attachFields(thiz.asInstanceOf[js.Object], classInfo)(env)
-      eval(Block(epilogTree))(env.setThis(thiz))
+      evalStmts(epilogTree)(env.setThis(thiz))
     }
 
     class Subclass(preSuperEnv: Env) extends parents.ParentClass(evalSuperArgs(preSuperEnv): _*) {
@@ -1174,6 +1177,7 @@ object Executor {
   val BoxedStringRef = ClassRef(BoxedStringClass)
   val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
 
+  val anyArgCtor = MethodName.constructor(List(ClassRef(ObjectClass)))
   val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
 
   val stackTraceElementCtor =
@@ -1207,6 +1211,9 @@ object Executor {
   trait JSVarArgsThisFunction extends js.ThisFunction {
     def apply(thiz: js.Any, args: js.Any*): js.Any
   }
+
+  def getJSGlobalRef(name: String): js.Any =
+    js.eval(name).asInstanceOf[js.Any]
 
   def setJSGlobalRef(name: String, value: js.Any): Unit = {
     val argName = if (name == "value") "x" else "value"

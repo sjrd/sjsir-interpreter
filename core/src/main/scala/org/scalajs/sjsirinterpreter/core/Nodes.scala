@@ -217,10 +217,8 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any = {
       val classInfo = executor.getClassInfo(className)
-      val instance = executor.createNewInstance(classInfo)
       val eargs = args.map(_.eval())
-      executor.applyMethodDefGeneric(classInfo, ctor, MemberNamespace.Constructor, Some(instance), eargs)
-      instance
+      executor.newInstanceWithConstructor(classInfo, ctor, eargs)
     }
   }
 
@@ -721,7 +719,7 @@ private[core] object Nodes {
       extends AssignLhs {
 
     override def eval()(implicit env: Env): js.Any =
-      js.eval(name).asInstanceOf[js.Any]
+      getJSGlobalRef(name)
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit =
       setJSGlobalRef(name, value)
