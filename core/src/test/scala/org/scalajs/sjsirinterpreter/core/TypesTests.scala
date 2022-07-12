@@ -20,56 +20,56 @@ object TypesTests extends TestSuite{
     val e = new Interpreter(Semantics.Defaults).executor
 
     test("asInstanceOf") {
-      val variants = Seq(
-        (IntLiteral(1), FloatType, 1.0),
-        (Null(), FloatType, 0.0),
-        (Null(), IntType, 0),
-        (Null(), BooleanType, false),
-        (IntLiteral(Byte.MaxValue), ByteType, Byte.MaxValue),
-        (IntLiteral(Short.MaxValue), ShortType, Short.MaxValue),
-        (DoubleLiteral(Float.MaxValue), FloatType, Float.MaxValue)
+      val variants: Seq[(js.Any, Type, js.Any)] = Seq(
+        (1, FloatType, 1.0),
+        (null, FloatType, 0.0),
+        (null, IntType, 0),
+        (null, BooleanType, false),
+        (Byte.MaxValue, ByteType, Byte.MaxValue),
+        (Short.MaxValue, ShortType, Short.MaxValue),
+        (Float.MaxValue, FloatType, Float.MaxValue)
       )
 
       variants.foreach {
-        case (inp, tpe, out) => e.eval(AsInstanceOf(inp, tpe)) ==> out
+        case (inp, tpe, out) => e.evalAsInstanceOf(inp, tpe) ==> out
       }
     }
 
     test("asInstanceOf for longs") {
-      val variants = Seq(
-        (Null(), LongType, 0L),
-        (LongLiteral(Long.MaxValue), LongType, Long.MaxValue),
-        (LongLiteral(Long.MinValue), LongType, Long.MinValue),
+      val variants: Seq[(js.Any, Type, Long)] = Seq(
+        (null, LongType, 0L),
+        (new LongInstance(Long.MaxValue), LongType, Long.MaxValue),
+        (new LongInstance(Long.MinValue), LongType, Long.MinValue),
       )
 
       variants.foreach {
         case (inp, tpe, out) =>
-          e.eval(AsInstanceOf(inp, tpe)).asInstanceOf[LongInstance].value ==> out
+          e.evalAsInstanceOf(inp, tpe).asInstanceOf[LongInstance].value ==> out
       }
     }
 
     test("disallowed asInstanceOf") {
       intercept[Throwable] {
-        e.eval(AsInstanceOf(IntLiteral(1), LongType))
+        e.evalAsInstanceOf(1, LongType)
       }
       intercept[Throwable] {
-        e.eval(AsInstanceOf(IntLiteral(Int.MaxValue), ShortType))
+        e.evalAsInstanceOf(Int.MaxValue, ShortType)
       }
       intercept[Throwable] {
-        e.eval(AsInstanceOf(ShortLiteral(Short.MaxValue), ByteType))
+        e.evalAsInstanceOf(Short.MaxValue, ByteType)
       }
       intercept[Throwable] {
-        e.eval(AsInstanceOf(DoubleLiteral(Double.MaxValue), FloatType))
+        e.evalAsInstanceOf(Double.MaxValue, FloatType)
       }
     }
 
     test("IsInstanceOf") {
-      def assertInstance(t: Tree, mapping: Map[Type, Boolean]) =
+      def assertInstance(value: js.Any, mapping: Map[Type, Boolean]) =
         for ((tpe, assertion) <- mapping) {
-          e.eval(IsInstanceOf(t, tpe)).asInstanceOf[Boolean] ==> assertion
+          e.evalIsInstanceOf(value, tpe).asInstanceOf[Boolean] ==> assertion
         }
 
-      assertInstance(Null(), Map(
+      assertInstance(null, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> false,
@@ -79,7 +79,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(BooleanLiteral(true), Map(
+      assertInstance(true, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> false,
@@ -89,7 +89,7 @@ object TypesTests extends TestSuite{
         BooleanType -> true
       ))
 
-      assertInstance(ByteLiteral(Byte.MaxValue), Map(
+      assertInstance(Byte.MaxValue, Map(
         ByteType -> true,
         ShortType -> true,
         IntType -> true,
@@ -99,7 +99,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(ShortLiteral(Short.MaxValue), Map(
+      assertInstance(Short.MaxValue, Map(
         ByteType -> false,
         ShortType -> true,
         IntType -> true,
@@ -109,7 +109,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(IntLiteral(Short.MaxValue.toInt + 1), Map(
+      assertInstance(Short.MaxValue.toInt + 1, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> true,
@@ -119,7 +119,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(IntLiteral(Int.MaxValue), Map(
+      assertInstance(Int.MaxValue, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> true,
@@ -129,7 +129,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(LongLiteral(Long.MaxValue), Map(
+      assertInstance(new LongInstance(Long.MaxValue), Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> false,
@@ -139,7 +139,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(FloatLiteral(Float.MaxValue), Map(
+      assertInstance(Float.MaxValue, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> false,
@@ -149,7 +149,7 @@ object TypesTests extends TestSuite{
         BooleanType -> false
       ))
 
-      assertInstance(DoubleLiteral(Double.MaxValue), Map(
+      assertInstance(Double.MaxValue, Map(
         ByteType -> false,
         ShortType -> false,
         IntType -> false,
