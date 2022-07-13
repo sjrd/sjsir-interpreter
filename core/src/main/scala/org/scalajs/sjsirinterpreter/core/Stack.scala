@@ -5,7 +5,7 @@ import scala.scalajs.js
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
 
-final class Stack {
+private[core] final class Stack {
   import Stack._
 
   val elements = js.Array[Element]()
@@ -53,6 +53,6 @@ final class Stack {
   }
 }
 
-object Stack {
+private[core] object Stack {
   final class Element(val className: String, val methodName: String, val pos: Position)
 }

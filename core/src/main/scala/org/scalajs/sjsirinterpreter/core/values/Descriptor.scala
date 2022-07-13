@@ -1,9 +1,8 @@
 package org.scalajs.sjsirinterpreter.core.values
 
 import scala.scalajs.js
-import scala.scalajs.js.annotation.JSGlobal
 
-object Descriptor {
+private[core] object Descriptor {
 
   def make(
     configurable: Boolean,

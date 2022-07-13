@@ -20,7 +20,7 @@ import org.scalajs.linker.interface.ModuleInitializer
 import org.scalajs.sjsirinterpreter.core.values._
 
 /** Main execution engine */
-final class Executor(val interpreter: Interpreter) {
+private[core] final class Executor(val interpreter: Interpreter) {
   import Executor._
 
   import interpreter.getClassInfo
@@ -590,7 +590,7 @@ final class Executor(val interpreter: Interpreter) {
   }
 }
 
-object Executor {
+private[core] object Executor {
   val ThrowableClass = ClassName("java.lang.Throwable")
   val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
   val StackTraceElementClass = ClassName("java.lang.StackTraceElement")

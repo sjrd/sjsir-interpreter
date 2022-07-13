@@ -3,7 +3,7 @@ package org.scalajs.sjsirinterpreter.core.values
 import scala.scalajs.js
 
 @js.native
-trait RawJSValue extends js.Any {
+private[core] trait RawJSValue extends js.Any {
   @js.annotation.JSBracketCall
   def jsMethodApply(method: js.Any)(args: js.Any*): js.Any
 

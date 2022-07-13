@@ -6,7 +6,7 @@ import org.scalajs.ir.Types._
 
 import org.scalajs.sjsirinterpreter.core.values._
 
-object Types {
+private[core] object Types {
 
   def zeroOf(tpe: Type): js.Any = tpe match {
     case BooleanType => false

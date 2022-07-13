@@ -4,10 +4,10 @@ import scala.scalajs.js
 
 import org.scalajs.ir.Names.LocalName
 
-final class Env(val captureEnv: Env.Captures, val localCount: Int) {
+private[core] final class Env(val captureEnv: Env.Captures, val localCount: Int) {
   private var newTarget: Option[js.Any] = None
   private var ths: Option[js.Any] = None
-  private val locals: Env.Locals = new Env.Locals(localCount)
+  private val locals = new Array[js.Any](localCount)
 
   def setNewTarget(target: js.Any): Unit =
     newTarget = Some(target)
@@ -43,9 +43,8 @@ final class Env(val captureEnv: Env.Captures, val localCount: Int) {
     s"Env(${captureEnv.mkString("<", ", ", ">")}, $newTarget, $ths, ${locals.mkString("<", ", ", ">")}"
 }
 
-object Env {
+private[core] object Env {
   type Captures = Array[_ <: js.Any]
-  type Locals = Array[js.Any]
 
   val emptyCaptures: Captures = new Array[js.Any](0)
 }

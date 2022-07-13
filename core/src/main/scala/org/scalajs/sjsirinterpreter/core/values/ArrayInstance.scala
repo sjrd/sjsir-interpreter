@@ -11,14 +11,14 @@ import org.scalajs.ir.Types._
 
 import org.scalajs.sjsirinterpreter.core.Types
 
-class ArrayInstance private (
+private[core] final class ArrayInstance private (
   private[core] final val typeRef: ArrayTypeRef,
   private[core] final val contents: Array[js.Any],
 ) extends js.Object {
   override def toString(): String = s"${typeRef.displayName}@${hashCode().toHexString}"
 }
 
-object ArrayInstance {
+private[core] object ArrayInstance {
   def fromList(typeRef: ArrayTypeRef, list: List[js.Any]): ArrayInstance =
     new ArrayInstance(typeRef, list.toArray)
 

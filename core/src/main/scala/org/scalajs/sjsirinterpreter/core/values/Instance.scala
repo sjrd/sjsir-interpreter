@@ -11,7 +11,7 @@ import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core._
 
-trait Instance extends js.Object {
+private[core] trait Instance extends js.Object {
   @JSName(Instance.instanceClassInfo)
   val classInfo: ClassInfo
 
@@ -19,7 +19,7 @@ trait Instance extends js.Object {
   val fields: Instance.Fields
 }
 
-object Instance {
+private[core] object Instance {
   val instanceClassInfo: js.Symbol = js.Symbol("classInfo")
   val instanceFields: js.Symbol = js.Symbol("fields")
 
