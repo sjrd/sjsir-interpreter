@@ -14,7 +14,6 @@ import org.scalajs.ir.Trees
 import org.scalajs.ir.Trees.MemberNamespace
 import org.scalajs.ir.Types._
 
-import org.scalajs.sjsirinterpreter.core.ops._
 import org.scalajs.sjsirinterpreter.core.values._
 
 import Executor._
@@ -356,16 +355,42 @@ private[core] object Nodes {
     }
   }
 
-  /** Unary operation (always preserves pureness). */
   final class UnaryOp(op: Trees.UnaryOp.Code, lhs: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
-      UnaryOps(op, lhs.eval())
+    override def eval()(implicit env: Env): js.Any = {
+      import Trees.UnaryOp._
+
+      val value = lhs.eval()
+
+      @inline def booleanValue: Boolean = value.asInstanceOf[Boolean]
+      @inline def charValue: Char = value.asInstanceOf[CharInstance].value
+      @inline def intValue: Int = value.asInstanceOf[Int]
+      @inline def longValue: Long = value.asInstanceOf[LongInstance].value
+      @inline def floatValue: Float = value.asInstanceOf[Float]
+      @inline def doubleValue: Double = value.asInstanceOf[Double]
+
+      (op: @switch) match {
+        case Boolean_!     => !booleanValue
+        case CharToInt     => charValue.toInt
+        case IntToLong     => new LongInstance(intValue.toLong)
+        case IntToChar     => new CharInstance(intValue.toChar)
+        case IntToByte     => intValue.toByte
+        case IntToShort    => intValue.toShort
+        case LongToInt     => longValue.toInt
+        case DoubleToInt   => doubleValue.toInt
+        case DoubleToFloat => doubleValue.toFloat
+        case LongToDouble  => longValue.toDouble
+        case DoubleToLong  => new LongInstance(doubleValue.toLong)
+        case LongToFloat   => longValue.toFloat
+
+        case ByteToInt | ShortToInt | IntToDouble | FloatToDouble =>
+          value
+      }
+    }
   }
 
-  /** Binary operation (always preserves pureness). */
   final class BinaryOp(op: Trees.BinaryOp.Code, lhs: Node, rhs: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
@@ -373,29 +398,102 @@ private[core] object Nodes {
     override def eval()(implicit env: Env): js.Any = {
       import org.scalajs.ir.Trees.BinaryOp._
 
+      val lhsValue = lhs.eval()
+      val rhsValue = rhs.eval()
+
+      @inline def booleanLHSValue: Boolean = lhsValue.asInstanceOf[Boolean]
+      @inline def intLHSValue: Int = lhsValue.asInstanceOf[Int]
+      @inline def longLHSValue: Long = lhsValue.asInstanceOf[LongInstance].value
+      @inline def floatLHSValue: Float = lhsValue.asInstanceOf[Float]
+      @inline def doubleLHSValue: Double = lhsValue.asInstanceOf[Double]
+
+      @inline def booleanRHSValue: Boolean = rhsValue.asInstanceOf[Boolean]
+      @inline def intRHSValue: Int = rhsValue.asInstanceOf[Int]
+      @inline def longRHSValue: Long = rhsValue.asInstanceOf[LongInstance].value
+      @inline def floatRHSValue: Float = rhsValue.asInstanceOf[Float]
+      @inline def doubleRHSValue: Double = rhsValue.asInstanceOf[Double]
+
+      def checkIntDivByZero(x: Int): Int = {
+        if (x == 0)
+          executor.throwVMException(ArithmeticExceptionClass, "/ by 0")
+        x
+      }
+
+      def checkLongDivByZero(x: Long): Long = {
+        if (x == 0L)
+          executor.throwVMException(ArithmeticExceptionClass, "/ by 0")
+        x
+      }
+
       (op: @switch) match {
-        case Int_/ | Int_% =>
-          val el = Types.asInt(lhs.eval())
-          val er = Types.asInt(rhs.eval())
-          if (er == 0)
-            executor.throwVMException(ArithmeticExceptionClass, "/ by 0")
-          else if (op == Int_/)
-            el / er
-          else
-            el % er
+        case === => lhsValue eq rhsValue
+        case !== => lhsValue ne rhsValue
 
-        case Long_/ | Long_% =>
-          val el = Types.asLong(lhs.eval()).value
-          val er = Types.asLong(rhs.eval()).value
-          if (er == 0L)
-            executor.throwVMException(ArithmeticExceptionClass, "/ by 0")
-          else if (op == Long_/)
-            new LongInstance(el / er)
-          else
-            new LongInstance(el % er)
+        case String_+ => "" + lhsValue + rhsValue
 
-        case _ =>
-          BinaryOps(op, lhs.eval(), rhs.eval())
+        case Boolean_== => booleanLHSValue == booleanRHSValue
+        case Boolean_!= => booleanLHSValue != booleanRHSValue
+        case Boolean_|  => booleanLHSValue | booleanRHSValue
+        case Boolean_&  => booleanLHSValue & booleanRHSValue
+
+        case Int_+ => intLHSValue + intRHSValue
+        case Int_- => intLHSValue - intRHSValue
+        case Int_* => intLHSValue * intRHSValue
+        case Int_/ => intLHSValue / checkIntDivByZero(intRHSValue)
+        case Int_% => intLHSValue % checkIntDivByZero(intRHSValue)
+
+        case Int_|   => intLHSValue | intRHSValue
+        case Int_&   => intLHSValue & intRHSValue
+        case Int_^   => intLHSValue ^ intRHSValue
+        case Int_<<  => intLHSValue << intRHSValue
+        case Int_>>> => intLHSValue >>> intRHSValue
+        case Int_>>  => intLHSValue >> intRHSValue
+
+        case Int_== => intLHSValue == intRHSValue
+        case Int_!= => intLHSValue != intRHSValue
+        case Int_<  => intLHSValue < intRHSValue
+        case Int_<= => intLHSValue <= intRHSValue
+        case Int_>  => intLHSValue > intRHSValue
+        case Int_>= => intLHSValue >= intRHSValue
+
+        case Long_+ => new LongInstance(longLHSValue + longRHSValue)
+        case Long_- => new LongInstance(longLHSValue - longRHSValue)
+        case Long_* => new LongInstance(longLHSValue * longRHSValue)
+        case Long_/ => new LongInstance(longLHSValue / checkLongDivByZero(longRHSValue))
+        case Long_% => new LongInstance(longLHSValue % checkLongDivByZero(longRHSValue))
+
+        case Long_|   => new LongInstance(longLHSValue | longRHSValue)
+        case Long_&   => new LongInstance(longLHSValue & longRHSValue)
+        case Long_^   => new LongInstance(longLHSValue ^ longRHSValue)
+        case Long_<<  => new LongInstance(longLHSValue << intRHSValue)
+        case Long_>>> => new LongInstance(longLHSValue >>> intRHSValue)
+        case Long_>>  => new LongInstance(longLHSValue >> intRHSValue)
+
+        case Long_== => longLHSValue == longRHSValue
+        case Long_!= => longLHSValue != longRHSValue
+        case Long_<  => longLHSValue < longRHSValue
+        case Long_<= => longLHSValue <= longRHSValue
+        case Long_>  => longLHSValue > longRHSValue
+        case Long_>= => longLHSValue >= longRHSValue
+
+        case Float_+ => floatLHSValue + floatRHSValue
+        case Float_- => floatLHSValue - floatRHSValue
+        case Float_* => floatLHSValue * floatRHSValue
+        case Float_/ => floatLHSValue / floatRHSValue
+        case Float_% => floatLHSValue % floatRHSValue
+
+        case Double_+ => doubleLHSValue + doubleRHSValue
+        case Double_- => doubleLHSValue - doubleRHSValue
+        case Double_* => doubleLHSValue * doubleRHSValue
+        case Double_/ => doubleLHSValue / doubleRHSValue
+        case Double_% => doubleLHSValue % doubleRHSValue
+
+        case Double_== => doubleLHSValue == doubleRHSValue
+        case Double_!= => doubleLHSValue != doubleRHSValue
+        case Double_<  => doubleLHSValue < doubleRHSValue
+        case Double_<= => doubleLHSValue <= doubleRHSValue
+        case Double_>  => doubleLHSValue > doubleRHSValue
+        case Double_>= => doubleLHSValue >= doubleRHSValue
       }
     }
   }
@@ -681,16 +779,63 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
-      JSUnaryOps(op, lhs.eval())
+    override def eval()(implicit env: Env): js.Any = {
+      import Trees.JSUnaryOp._
+
+      val value = lhs.eval()
+
+      @inline def dynValue: js.Dynamic = value.asInstanceOf[js.Dynamic]
+
+      (op: @switch) match {
+        case + => +dynValue
+        case - => -dynValue
+        case ~ => ~dynValue
+        case ! => !dynValue
+
+        case `typeof` => js.typeOf(value)
+      }
+    }
   }
 
   final class JSBinaryOp(op: Trees.JSBinaryOp.Code, lhs: Node, rhs: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
-      JSBinaryOps(op, lhs.eval(), rhs.eval())
+    override def eval()(implicit env: Env): js.Any = {
+      import Trees.JSBinaryOp._
+
+      @inline def lhsValue = lhs.eval().asInstanceOf[js.Dynamic]
+      @inline def rhsValue = rhs.eval().asInstanceOf[js.Dynamic]
+
+      (op: @switch) match {
+        case === => js.special.strictEquals(lhsValue, rhsValue)
+        case !== => !js.special.strictEquals(lhsValue, rhsValue)
+
+        case + => lhsValue + rhsValue
+        case - => lhsValue - rhsValue
+        case * => lhsValue * rhsValue
+        case / => lhsValue / rhsValue
+        case % => lhsValue % rhsValue
+
+        case |   => lhsValue | rhsValue
+        case &   => lhsValue & rhsValue
+        case ^   => lhsValue ^ rhsValue
+        case <<  => lhsValue << rhsValue
+        case >>  => lhsValue >> rhsValue
+        case >>> => lhsValue >>> rhsValue
+
+        case <  => lhsValue < rhsValue
+        case <= => lhsValue <= rhsValue
+        case >  => lhsValue > rhsValue
+        case >= => lhsValue >= rhsValue
+
+        case && => lhsValue && rhsValue
+        case || => lhsValue || rhsValue
+
+        case `in`         => js.special.in(lhsValue, rhsValue)
+        case `instanceof` => js.special.instanceof(lhsValue, rhsValue)
+      }
+    }
   }
 
   final class JSArrayConstr(items: List[NodeOrJSSpread])(
