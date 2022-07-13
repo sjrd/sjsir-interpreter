@@ -98,7 +98,9 @@ private[core] final class Compiler(interpreter: Interpreter) {
       // Scala expressions
 
       case New(className, ctor, args) =>
-        new n.New(getClassInfo(className), ctor.name, args map compile)
+        val classInfo = getClassInfo(className)
+        val methodInfo = classInfo.lookupMethod(MemberNamespace.Constructor, ctor.name)
+        new n.New(classInfo, methodInfo, compileList(args))
 
       case LoadModule(className) =>
         new n.LoadModule(getClassInfo(className))
@@ -119,10 +121,16 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Apply(flags, compile(receiver), method.name, compileList(args))
 
       case ApplyStatically(flags, receiver, className, method, args) =>
-        new n.ApplyStatically(flags, compile(receiver), getClassInfo(className), method.name, compileList(args))
+        val classInfo = getClassInfo(className)
+        val namespace = MemberNamespace.forNonStaticCall(flags)
+        val methodInfo = classInfo.lookupMethod(namespace, method.name)
+        new n.ApplyStatically(methodInfo, compile(receiver), compileList(args))
 
       case ApplyStatic(flags, className, method, args) =>
-        new n.ApplyStatic(flags, getClassInfo(className), method.name, compileList(args))
+        val classInfo = getClassInfo(className)
+        val namespace = MemberNamespace.forStaticCall(flags)
+        val methodInfo = classInfo.lookupMethod(namespace, method.name)
+        new n.ApplyStatic(methodInfo, compileList(args))
 
       case UnaryOp(op, lhs) =>
         new n.UnaryOp(op, compile(lhs))

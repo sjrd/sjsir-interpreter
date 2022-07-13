@@ -214,7 +214,7 @@ private[core] object Nodes {
 
   // Scala expressions
 
-  final class New(classInfo: ClassInfo, ctor: MethodName, args: List[Node])(
+  final class New(classInfo: ClassInfo, ctor: MethodInfo, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
@@ -324,37 +324,35 @@ private[core] object Nodes {
           else
             method
         }
+        val methodInfo = classInfo.lookupPublicMethod(patchedMethodName)
 
         val eargs = args.map(_.eval())
-        executor.applyMethodDefGeneric(classInfo, patchedMethodName, MemberNamespace.Public, Some(instance), eargs)
+
+        executor.applyMethodDefGeneric(methodInfo, Some(instance), eargs)
       }
     }
   }
 
   /** Apply an instance method with static dispatch (e.g., super calls). */
-  final class ApplyStatically(flags: Trees.ApplyFlags, receiver: Node,
-      classInfo: ClassInfo, methodName: MethodName, args: List[Node])(
+  final class ApplyStatically(methodInfo: MethodInfo, receiver: Node, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       val instance = receiver.eval()
       val eargs = args.map(_.eval())
-      val namespace = MemberNamespace.forNonStaticCall(flags)
-      executor.applyMethodDefGeneric(classInfo, methodName, namespace, Some(instance), eargs)
+      executor.applyMethodDefGeneric(methodInfo, Some(instance), eargs)
     }
   }
 
   /** Apply a static method. */
-  final class ApplyStatic(flags: Trees.ApplyFlags, classInfo: ClassInfo,
-      methodName: MethodName, args: List[Node])(
+  final class ApplyStatic(methodInfo: MethodInfo, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       val eargs = args.map(_.eval())
-      val namespace = MemberNamespace.forStaticCall(flags)
-      executor.applyMethodDefGeneric(classInfo, methodName, namespace, None, eargs)
+      executor.applyMethodDefGeneric(methodInfo, None, eargs)
     }
   }
 

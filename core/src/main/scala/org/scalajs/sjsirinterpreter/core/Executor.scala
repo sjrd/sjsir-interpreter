@@ -90,18 +90,22 @@ final class Executor(val interpreter: Interpreter) {
     _objectClassInfo
   }
 
-  private var _throwableClassInfo: ClassInfo = null
-  def throwableClassInfo(implicit pos: Position): ClassInfo = {
-    if (_throwableClassInfo == null)
-      _throwableClassInfo = getClassInfo(ThrowableClass)
-    _throwableClassInfo
+  private var _stackTraceElementCtorInfo: MethodInfo = null
+  def stackTraceElementCtorInfo(implicit pos: Position): MethodInfo = {
+    if (_stackTraceElementCtorInfo == null) {
+      _stackTraceElementCtorInfo =
+        getClassInfo(StackTraceElementClass).lookupMethod(MemberNamespace.Constructor, stackTraceElementCtor)
+    }
+    _stackTraceElementCtorInfo
   }
 
-  private var _stackTraceElementClassInfo: ClassInfo = null
-  def stackTraceElementClassInfo(implicit pos: Position): ClassInfo = {
-    if (_stackTraceElementClassInfo == null)
-      _stackTraceElementClassInfo = getClassInfo(StackTraceElementClass)
-    _stackTraceElementClassInfo
+  private var _jlClassCtorInfo: MethodInfo = null
+  def jlClassCtorInfo(implicit pos: Position): MethodInfo = {
+    if (_jlClassCtorInfo == null) {
+      _jlClassCtorInfo =
+        getClassInfo(ClassClass).lookupMethod(MemberNamespace.Constructor, anyArgCtor)
+    }
+    _jlClassCtorInfo
   }
 
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
@@ -156,22 +160,18 @@ final class Executor(val interpreter: Interpreter) {
         case MainMethodWithArgs(className, methodName, args) =>
           stack.enter(pos, className, "<module-initializer>") {
             val classInfo = getClassInfo(className)
+            val methodInfo = classInfo.lookupMethod(MemberNamespace.PublicStatic, methodName)
             val argArray = ArrayInstance.fromList(arrayOfStringTypeRef, args.map(s => s: js.Any))
-            applyMethodDefGeneric(classInfo, methodName, MemberNamespace.PublicStatic, None, List(argArray))
+            applyMethodDefGeneric(methodInfo, None, List(argArray))
           }
         case VoidMainMethod(className, methodName) =>
           stack.enter(pos, className, "<module-initializer>") {
             val classInfo = getClassInfo(className)
-            applyMethodDefGeneric(classInfo, methodName, MemberNamespace.PublicStatic, None, Nil)
+            val methodInfo = classInfo.lookupMethod(MemberNamespace.PublicStatic, methodName)
+            applyMethodDefGeneric(methodInfo, None, Nil)
           }
       }
     }
-  }
-
-  def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
-      receiver: Option[js.Any], args: List[js.Any])(
-      implicit pos: Position): js.Any = {
-    applyMethodDefGeneric(classInfo.lookupMethod(namespace, methodName), receiver, args)
   }
 
   def applyMethodDefGeneric(methodInfo: MethodInfo, receiver: Option[js.Any], args: List[js.Any])(
@@ -187,10 +187,11 @@ final class Executor(val interpreter: Interpreter) {
           if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
           if (e.pos.isEmpty) -1 else e.pos.line,
         )
-        newInstanceWithConstructor(stackTraceElementClassInfo, stackTraceElementCtor, args)
+        newInstanceWithConstructor(stackTraceElementCtorInfo, args)
       }
       val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
-      applyMethodDefGeneric(throwableClassInfo, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
+      val setStackTraceMethodInfo = th.asInstanceOf[Instance].classInfo.lookupPublicMethod(setStackTraceMethodName)
+      applyMethodDefGeneric(setStackTraceMethodInfo, receiver, List(stackTraceArray))
     }
 
     stack.enter(pos, methodInfo) {
@@ -225,15 +226,20 @@ final class Executor(val interpreter: Interpreter) {
     instance
   }
 
-  def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodName, args: List[js.Any])(
+  def newInstanceWithConstructor(ctor: MethodInfo, args: List[js.Any])(implicit pos: Position): Instance =
+    newInstanceWithConstructor(ctor.owner, ctor, args)
+
+  def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodInfo, args: List[js.Any])(
       implicit pos: Position): Instance = {
     val instance = createNewInstance(classInfo)
-    applyMethodDefGeneric(classInfo, ctor, MemberNamespace.Constructor, Some(instance), args)
+    applyMethodDefGeneric(ctor, Some(instance), args)
     instance
   }
 
   def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
-    val ex = newInstanceWithConstructor(getClassInfo(cls), stringArgCtor, List(message))
+    val classInfo = getClassInfo(cls)
+    val ctorInfo = classInfo.lookupMethod(MemberNamespace.Constructor, stringArgCtor)
+    val ex = newInstanceWithConstructor(classInfo, ctorInfo, List(message))
     throw js.JavaScriptException(ex)
   }
 
@@ -293,7 +299,8 @@ final class Executor(val interpreter: Interpreter) {
   def loadModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
     classInfo.getModuleClassInstance {
       stack.enter(pos, classInfo.classNameString, "<clinit>") {
-        newInstanceWithConstructor(classInfo, NoArgConstructorName, Nil)
+        val ctorInfo = classInfo.lookupMethod(MemberNamespace.Constructor, NoArgConstructorName)
+        newInstanceWithConstructor(classInfo, ctorInfo, Nil)
       }
     }
   }
@@ -454,7 +461,7 @@ final class Executor(val interpreter: Interpreter) {
   def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
     classOfCache.getOrElseUpdate(typeRef, {
       val typeData = genTypeData(typeRef)
-      newInstanceWithConstructor(getClassInfo(ClassClass), anyArgCtor, List(typeData))
+      newInstanceWithConstructor(jlClassCtorInfo, List(typeData))
     })
   }
 
