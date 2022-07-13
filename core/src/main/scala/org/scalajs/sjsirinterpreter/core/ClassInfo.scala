@@ -323,7 +323,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
       val compiler = interpreter.compiler
       compiledStaticJSMemberDefs = classDef.memberDefs.collect {
         case fieldDef: JSFieldDef if fieldDef.flags.namespace.isStatic =>
-          compiler.compileJSFieldDef(fieldDef)
+          compiler.compileJSFieldDef(this, fieldDef)
         case methodDef: JSMethodDef if methodDef.flags.namespace.isStatic =>
           compiler.compileJSMethodDef(this, methodDef)
         case propertyDef: JSPropertyDef if propertyDef.flags.namespace.isStatic =>
@@ -339,7 +339,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
       val compiler = interpreter.compiler
       compiledJSFieldDefs = classDef.memberDefs.collect {
         case fieldDef: JSFieldDef if !fieldDef.flags.namespace.isStatic =>
-          compiler.compileJSFieldDef(fieldDef)
+          compiler.compileJSFieldDef(this, fieldDef)
       }
     }
     compiledJSFieldDefs

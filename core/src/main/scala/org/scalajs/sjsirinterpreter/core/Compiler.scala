@@ -1,7 +1,10 @@
 package org.scalajs.sjsirinterpreter.core
 
+import scala.collection.mutable
+
 import scala.scalajs.js
 
+import org.scalajs.ir.Names.LocalName
 import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core.{Nodes => n}
@@ -9,14 +12,31 @@ import org.scalajs.sjsirinterpreter.core.values.CharInstance
 import org.scalajs.sjsirinterpreter.core.values.LongInstance
 
 private[core] final class Compiler(interpreter: Interpreter) {
+  import Compiler._
+
   private implicit val executor = interpreter.executor
 
   import interpreter.getClassInfo
 
-  private def compileList(trees: List[Tree]): List[n.Node] =
+  def compileBody(params: List[ParamDef], body: Tree): Nodes.Body = {
+    val envBuilder = new EnvBuilder(Nil).addParams(params)
+    val compiledBody = compile(body)(envBuilder)
+    new n.Body(envBuilder.nextLocalIndex, compiledBody)
+  }
+
+  def compileJSBody(captureParams: List[ParamDef], params: List[ParamDef],
+      restParam: Option[ParamDef], body: Tree): Nodes.JSBody = {
+    val envBuilder = new EnvBuilder(captureParams).addParams(params).addRestParam(restParam)
+    val compiledBody = compile(body)(envBuilder)
+    new n.JSBody(envBuilder.nextLocalIndex, params.size, restParam.isDefined, compiledBody)
+  }
+
+  private def compileList(trees: List[Tree])(implicit envBuilder: EnvBuilder): List[n.Node] =
     trees.map(compile(_))
 
-  private def compileExprOrJSSpreads(exprs: List[TreeOrJSSpread]): List[n.NodeOrJSSpread] = {
+  private def compileExprOrJSSpreads(exprs: List[TreeOrJSSpread])(
+      implicit envBuilder: EnvBuilder): List[n.NodeOrJSSpread] = {
+
     exprs.map { expr =>
       implicit val pos = expr.pos
       expr match {
@@ -26,14 +46,15 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
   }
 
-  def compile(expr: Tree): Nodes.Node = {
+  private def compile(expr: Tree)(implicit envBuilder: EnvBuilder): Nodes.Node = {
     implicit val pos = expr.pos
 
     expr match {
       // Definitions
 
-      case VarDef(name, _, tpe, mutable, rhs) =>
-        new n.VarDef(name.name, tpe, mutable, compile(rhs))
+      case VarDef(name, _, _, _, rhs) =>
+        val index = envBuilder.declareLocalVar(name.name)
+        new n.Assign(new n.LocalVarRef(index), compile(rhs))
 
       // Control flow constructs
 
@@ -62,10 +83,12 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.DoWhile(compile(body), compile(cond))
 
       case ForIn(obj, keyVar, keyVarOriginalName, body) =>
-        new n.ForIn(compile(obj), keyVar.name, compile(body))
+        val keyVarIndex = envBuilder.declareLocalVar(keyVar.name)
+        new n.ForIn(compile(obj), keyVarIndex, compile(body))
 
       case TryCatch(block, errVar, errVarOriginalName, handler) =>
-        new n.TryCatch(compile(block), errVar.name, compile(handler))
+        val errVarIndex = envBuilder.declareLocalVar(errVar.name)
+        new n.TryCatch(compile(block), errVarIndex, compile(handler))
 
       case TryFinally(block, finalizer) =>
         new n.TryFinally(compile(block), compile(finalizer))
@@ -264,13 +287,16 @@ private[core] final class Compiler(interpreter: Interpreter) {
       // Atomic expressions
 
       case VarRef(ident) =>
-        new n.VarRef(ident.name)
+        envBuilder.storages(ident.name) match {
+          case LocalStorage.Capture(index) => new n.CaptureRef(index)
+          case LocalStorage.Local(index)   => new n.LocalVarRef(index)
+        }
 
       case This() =>
         new n.This()
 
       case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
-        new n.Closure(arrow, captureParams, params, restParam, compile(body), captureValues.map(compile))
+        new n.Closure(arrow, compileJSBody(captureParams, params, restParam, body), captureValues.map(compile))
 
       case CreateJSClass(className, captureValues) =>
         new n.CreateJSClass(getClassInfo(className), captureValues.map(compile))
@@ -292,40 +318,44 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
     val classCaptures = classDef.jsClassCaptures.getOrElse(Nil)
 
-    val superClass = classDef.jsSuperClass match {
+    val superClass: n.JSBody = classDef.jsSuperClass match {
       case Some(superClassTree) =>
-        compile(superClassTree)
+        compileJSBody(classCaptures, Nil, None, superClassTree)
       case None =>
         val superClassInfo = classInfo.superClass.getOrElse {
           throw new AssertionError(s"No superclass for JS class $classInfo at $pos")
         }
-        new n.LoadJSConstructor(superClassInfo)
+        new n.JSBody(localCount = 0, paramCount = 0, hasRestParam = false, new n.LoadJSConstructor(superClassInfo))
     }
 
-    val ctorDef = classDef.memberDefs.find {
-      case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
-      case _                                                     => false
-    }.getOrElse {
-      throw new AssertionError(s"Cannot find JS constructor in $classInfo at $pos")
-    }.asInstanceOf[JSMethodDef]
+    val constructorBody = {
+      val ctorDef = classDef.memberDefs.find {
+        case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
+        case _                                                     => false
+      }.getOrElse {
+        throw new AssertionError(s"Cannot find JS constructor in $classInfo at $pos")
+      }.asInstanceOf[JSMethodDef]
 
-    val (beforeSuperConstructorTrees, superConstructorArgTrees, afterSuperConstructorTrees) =
-      splitJSConstructor(ctorDef.body)
+      val (beforeSuperConstructorTrees, superConstructorArgTrees, afterSuperConstructorTrees) =
+        splitJSConstructor(ctorDef.body)
 
-    val beforeSuperConstructor = compileList(beforeSuperConstructorTrees)
-    val superConstructorArgs = compileExprOrJSSpreads(superConstructorArgTrees)
-    val afterSuperConstructor = compileList(afterSuperConstructorTrees)
+      val ctorEnvBuilder = new EnvBuilder(classCaptures).addParams(ctorDef.args).addRestParam(ctorDef.restParam)
+      val beforeSuperConstructor = compileList(beforeSuperConstructorTrees)(ctorEnvBuilder)
+      val superConstructorArgs = compileExprOrJSSpreads(superConstructorArgTrees)(ctorEnvBuilder)
+      val afterSuperConstructor = compileList(afterSuperConstructorTrees)(ctorEnvBuilder)
 
-    new n.JSClassDef(
-      classInfo,
-      classCaptures,
-      superClass,
-      ctorDef.args,
-      ctorDef.restParam,
-      beforeSuperConstructor,
-      superConstructorArgs,
-      afterSuperConstructor,
-    )
+      new n.JSConstructorBody(
+        classInfo,
+        ctorEnvBuilder.nextLocalIndex,
+        ctorDef.args.size,
+        ctorDef.restParam.isDefined,
+        beforeSuperConstructor,
+        superConstructorArgs,
+        afterSuperConstructor,
+      )
+    }
+
+    new n.JSClassDef(classInfo, superClass, constructorBody)
   }
 
   private def splitJSConstructor(tree: Tree): (List[Tree], List[TreeOrJSSpread], List[Tree]) = {
@@ -346,23 +376,68 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
   }
 
-  def compileJSFieldDef(fieldDef: JSFieldDef): n.JSFieldDef = {
+  def compileJSFieldDef(owner: ClassInfo, fieldDef: JSFieldDef): n.JSFieldDef = {
     implicit val pos = fieldDef.pos
-    new n.JSFieldDef(compile(fieldDef.name), Types.zeroOf(fieldDef.ftpe))
+    val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
+    new n.JSFieldDef(compileJSBody(captureParams, Nil, None, fieldDef.name), Types.zeroOf(fieldDef.ftpe))
   }
 
   def compileJSMethodDef(owner: ClassInfo, methodDef: JSMethodDef): n.JSMethodDef = {
     implicit val pos = methodDef.pos
-    new n.JSMethodDef(owner, compile(methodDef.name),
-        methodDef.args, methodDef.restParam, compile(methodDef.body))
+    val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
+    new n.JSMethodDef(owner, compileJSBody(captureParams, Nil, None, methodDef.name),
+        methodDef.args, methodDef.restParam,
+        compileJSBody(captureParams, methodDef.args, methodDef.restParam, methodDef.body))
   }
 
   def compileJSPropertyDef(owner: ClassInfo, propertyDef: JSPropertyDef): n.JSPropertyDef = {
     implicit val pos = propertyDef.pos
-    new n.JSPropertyDef(owner, compile(propertyDef.name),
-        propertyDef.getterBody.map(compile(_)),
+    val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
+    new n.JSPropertyDef(owner, compileJSBody(captureParams, Nil, None, propertyDef.name),
+        propertyDef.getterBody.map(compileJSBody(captureParams, Nil, None, _)),
         propertyDef.setterArgAndBody.map {
-          case (paramDef, body) => (paramDef, compile(body))
+          case (paramDef, body) => compileJSBody(captureParams, List(paramDef), None, body)
         })
+  }
+}
+
+private[core] object Compiler {
+  private final class EnvBuilder(captureParams: List[ParamDef]) {
+    val storages = mutable.Map.empty[LocalName, LocalStorage]
+
+    val captureParamCount = captureParams.size
+    for ((captureParam, index) <- captureParams.zipWithIndex)
+      storages(captureParam.name.name) = LocalStorage.Capture(index)
+
+    var paramCount: Int = 0
+    var nextLocalIndex: Int = 0
+
+    def addParams(params: List[ParamDef]): this.type = {
+      assert(nextLocalIndex == paramCount, "Cannot add params when locals have already been declared")
+      for (param <- params) {
+        storages(param.name.name) = LocalStorage.Local(nextLocalIndex)
+        paramCount += 1
+        nextLocalIndex += 1
+      }
+      this
+    }
+
+    def addRestParam(restParam: Option[ParamDef]): this.type = {
+      addParams(restParam.toList)
+    }
+
+    def declareLocalVar(name: LocalName): Int = {
+      val index = nextLocalIndex
+      storages(name) = LocalStorage.Local(index)
+      nextLocalIndex += 1
+      index
+    }
+  }
+
+  private sealed abstract class LocalStorage
+
+  private object LocalStorage {
+    final case class Capture(index: Int) extends LocalStorage
+    final case class Local(index: Int) extends LocalStorage
   }
 }

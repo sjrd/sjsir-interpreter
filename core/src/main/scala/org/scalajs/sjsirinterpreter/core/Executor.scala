@@ -134,8 +134,8 @@ final class Executor(val interpreter: Interpreter) {
           case TopLevelModuleExportDef(_, _) =>
             loadModuleGeneric(classInfo)
           case TopLevelMethodExportDef(_, JSMethodDef(flags, _, args, restParam, body)) =>
-            val compiledBody = interpreter.compiler.compile(body)
-            createJSThisFunction(className.nameString, exportName, args, restParam, compiledBody)(Env.empty, pos)
+            val compiledBody = interpreter.compiler.compileJSBody(Nil, args, restParam, body)
+            createJSThisFunction(className.nameString, exportName, Env.emptyCaptures, compiledBody)
           case TopLevelFieldExportDef(_, _, FieldIdent(fieldName)) =>
             classInfo.registerStaticFieldMirror(fieldName, exportName)
             classInfo.getStaticField(fieldName)
@@ -194,13 +194,10 @@ final class Executor(val interpreter: Interpreter) {
 
     stack.enter(pos, methodInfo) {
       val compiledBody = methodInfo.getCompiledBody {
-        interpreter.compiler.compile(methodInfo.methodDef.body.get)
+        val methodDef = methodInfo.methodDef
+        interpreter.compiler.compileBody(methodDef.args, methodDef.body.get)
       }
-      val methodDef = methodInfo.methodDef
-      val innerEnv = methodDef.args.zip(args).foldLeft(Env.empty.setThis(receiver)) { (env, paramAndArg) =>
-        env.bind(paramAndArg._1.name.name, paramAndArg._2)
-      }
-      compiledBody.eval()(innerEnv)
+      compiledBody.eval(receiver, args)
     }
   }
 
@@ -219,7 +216,7 @@ final class Executor(val interpreter: Interpreter) {
           instance.setField((superclassInfo.className, fieldName), Types.zeroOf(tpe))
       }
       for (methodPropDef <- superclassInfo.getCompiledJSMethodPropDefs())
-        methodPropDef.createOn(instance)(Env.empty)
+        methodPropDef.createOn(instance, Env.emptyCaptures)
     }
     instance
   }
@@ -265,24 +262,20 @@ final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def createJSThisFunction(className: String, methodName: String,
-      params: List[ParamDef], restParam: Option[ParamDef], body: Nodes.Node)(
-      implicit env: Env, pos: Position): js.Any = {
-    { (thizz, args) =>
+  def createJSThisFunction(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.JSBody)(
+      implicit pos: Position): js.Any = {
+    { (thiz, args) =>
       stack.enter(pos, className, methodName) {
-        val argsMap = bindJSArgs(params, restParam, args.toSeq)
-        body.eval()(env.bind(argsMap).setThis(thizz))
+        body.eval(captureEnv, None, Some(thiz), args.toList)
       }
     }: JSVarArgsThisFunction
   }
 
-  def createJSArrowFunction(className: String, methodName: String,
-      params: List[ParamDef], restParam: Option[ParamDef], body: Nodes.Node)(
-      implicit env: Env, pos: Position): js.Any = {
+  def createJSArrowFunction(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.JSBody)(
+      implicit pos: Position): js.Any = {
     { (args) =>
       stack.enter(pos, className, methodName) {
-        val argsMap = bindJSArgs(params, restParam, args.toSeq)
-        body.eval()(env.bind(argsMap))
+        body.eval(captureEnv, None, None, args.toList)
       }
     }: JSVarArgsFunction
   }

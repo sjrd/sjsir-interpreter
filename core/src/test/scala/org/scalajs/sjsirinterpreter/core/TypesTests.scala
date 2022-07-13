@@ -14,7 +14,7 @@ import org.scalajs.sjsirinterpreter.core.values._
 
 object TypesTests extends TestSuite{
   implicit val position = NoPosition
-  implicit val env = Env.empty
+  implicit val env = new Env(Env.emptyCaptures, 0)
 
   val tests = Tests {
     val e = new Interpreter(Semantics.Defaults).executor

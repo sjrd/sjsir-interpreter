@@ -19,6 +19,142 @@ import org.scalajs.sjsirinterpreter.core.values._
 import Executor._
 
 private[core] object Nodes {
+  final class Body(localCount: Int, tree: Node) {
+    def eval(receiver: Option[js.Any], args: List[js.Any]): js.Any = {
+      val env = new Env(Env.emptyCaptures, localCount)
+
+      receiver.foreach(env.setThis(_))
+
+      var index = 0
+      var argsLeft = args
+      while (argsLeft.nonEmpty) {
+        env.setLocal(index, argsLeft.head)
+        index += 1
+        argsLeft = argsLeft.tail
+      }
+
+      tree.eval()(env)
+    }
+  }
+
+  final class JSBody(localCount: Int, paramCount: Int, hasRestParam: Boolean, tree: Node) {
+    def eval(captureEnv: Env.Captures, newTarget: Option[js.Any], thiz: Option[js.Any], args: List[js.Any]): js.Any = {
+      val env = new Env(captureEnv, localCount)
+
+      newTarget.foreach(env.setNewTarget(_))
+      thiz.foreach(env.setThis(_))
+
+      var index = 0
+      var argsLeft = args
+
+      // Fixed params for which an argument is provided
+      while (index < paramCount && argsLeft.nonEmpty) {
+        env.setLocal(index, argsLeft.head)
+        index += 1
+        argsLeft = argsLeft.tail
+      }
+
+      // Fixed params for which no argument was provided
+      while (index < paramCount) {
+        env.setLocal(index, js.undefined)
+        index += 1
+      }
+
+      // Rest param
+      if (hasRestParam)
+        env.setLocal(paramCount, argsLeft.toJSArray)
+
+      tree.eval()(env)
+    }
+  }
+
+  final class JSConstructorBody(
+    classInfo: ClassInfo,
+    localCount: Int,
+    paramCount: Int,
+    hasRestParam: Boolean,
+    beforeSuperConstructor: List[Node],
+    superConstructorArgs: List[NodeOrJSSpread],
+    afterSuperConstructor: List[Node],
+  )(implicit executor: Executor) {
+    def eval(superClassValue: js.Any, captureEnv: Env.Captures): js.Dynamic = {
+      val parents = js.Dynamic.literal(ParentClass = superClassValue).asInstanceOf[RawParents]
+
+      class Subclass(preSuperEnv: Env) extends parents.ParentClass(toScalaVarArgs(evalSuperArgs(preSuperEnv)): _*) {
+        def this(args: js.Any*) = this(evalBeforeSuper(captureEnv, js.`new`.target, args))
+        evalAfterSuper(preSuperEnv, this)
+      }
+
+      js.constructorOf[Subclass]
+    }
+
+    private def evalBeforeSuper(captureEnv: Env.Captures, newTarget: js.Any, args: Seq[js.Any]): Env = {
+      val env = new Env(captureEnv, localCount)
+
+      env.setNewTarget(newTarget)
+
+      var index = 0
+      var argsLeft = args.toList
+
+      // Fixed params for which an argument is provided
+      while (index < paramCount && argsLeft.nonEmpty) {
+        env.setLocal(index, argsLeft.head)
+        index += 1
+        argsLeft = argsLeft.tail
+      }
+
+      // Fixed params for which no argument was provided
+      while (index < paramCount) {
+        env.setLocal(index, js.undefined)
+        index += 1
+      }
+
+      // Rest param
+      if (hasRestParam)
+        env.setLocal(paramCount, argsLeft.toJSArray)
+
+      for (stat <- beforeSuperConstructor)
+        stat.eval()(env)
+
+      env
+    }
+
+    private def evalSuperArgs(env: Env): js.Array[js.Any] =
+      evalJSArgList(superConstructorArgs)(env)
+
+    private def evalAfterSuper(env: Env, thiz: js.Any): Unit = {
+      env.setThis(thiz)
+      attachFields(thiz, env.captureEnv)
+
+      for (stat <- afterSuperConstructor)
+        stat.eval()(env)
+    }
+
+    private def attachFields(target: js.Any, captureEnv: Env.Captures): Unit = {
+      implicit val pos = classInfo.classDef.pos
+
+      if (classInfo.instanceFieldDefs.nonEmpty) {
+        val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(executor.fieldsSymbol)
+        val fields = if (js.isUndefined(existing)) {
+          val fields: Instance.Fields = mutable.Map.empty
+          val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
+          js.Dynamic.global.Object.defineProperty(target, executor.fieldsSymbol, descriptor)
+          fields
+        } else {
+          existing.asInstanceOf[Instance.Fields]
+        }
+
+        classInfo.instanceFieldDefs.foreach {
+          case Trees.FieldDef(flags, Trees.FieldIdent(fieldName), originalName, tpe) =>
+            fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
+        }
+      }
+
+      for (fieldDef <- classInfo.getCompiledJSFieldDefs())
+        fieldDef.createOn(target, captureEnv)
+    }
+  }
+
   sealed abstract class NodeOrJSSpread {
     def evalToArgsArray(dest: js.Array[js.Any])(implicit env: Env): Unit
   }
@@ -37,19 +173,6 @@ private[core] object Nodes {
     result
   }
 
-  // Definitions
-
-  final class VarDef(val name: LocalName, vtpe: Type, mutable: Boolean, val rhs: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any = {
-      // This an "orphan" VarDef, not in a Block. Evaluate rhs and throw it away.
-      rhs.eval()
-      ()
-    }
-  }
-
   // Control flow constructs
 
   final class Skip()(
@@ -66,14 +189,8 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any = {
       var lastValue: js.Any = ()
-      var runningEnv: Env = env
-      stats.foreach {
-        case varDef: VarDef =>
-          runningEnv = runningEnv.bind(varDef.name, varDef.rhs.eval()(runningEnv))
-          lastValue = ()
-        case stat =>
-          lastValue = stat.eval()(runningEnv)
-      }
+      for (stat <- stats)
+        lastValue = stat.eval()
       lastValue
     }
   }
@@ -141,19 +258,19 @@ private[core] object Nodes {
     }
   }
 
-  final class ForIn(obj: Node, keyVar: LocalName, body: Node)(
+  final class ForIn(obj: Node, keyVarIndex: Int, body: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       js.special.forin(obj.eval()) { key =>
-        val innerEnv = env.bind(keyVar, key.asInstanceOf[js.Any])
-        body.eval()(innerEnv)
+        env.setLocal(keyVarIndex, key.asInstanceOf[js.Any])
+        body.eval()
       }
     }
   }
 
-  final class TryCatch(block: Node, errVar: LocalName, handler: Node)(
+  final class TryCatch(block: Node, errVarIndex: Int, handler: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
@@ -162,11 +279,11 @@ private[core] object Nodes {
         block.eval()
       } catch {
         case js.JavaScriptException(e) =>
-          val innerEnv = env.bind(errVar, e.asInstanceOf[js.Any])
-          handler.eval()(innerEnv)
+          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
+          handler.eval()
         case e: Throwable =>
-          val innerEnv = env.bind(errVar, e.asInstanceOf[js.Any])
-          handler.eval()(innerEnv)
+          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
+          handler.eval()
       }
     }
   }
@@ -905,15 +1022,26 @@ private[core] object Nodes {
 
   // Atomic expressions
 
-  final class VarRef(name: LocalName)(
+  final class CaptureRef(index: Int)(
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
     override def eval()(implicit env: Env): js.Any =
-      env.get(name)
+      env.getCapture(index)
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit =
-      env.set(name, value)
+      throw new AssertionError(s"Cannot assign to capture ref $index at $pos")
+  }
+
+  final class LocalVarRef(index: Int)(
+      implicit executor: Executor, pos: Position)
+      extends AssignLhs {
+
+    override def eval()(implicit env: Env): js.Any =
+      env.getLocal(index)
+
+    override def evalAssign(value: js.Any)(implicit env: Env): Unit =
+      env.setLocal(index, value)
   }
 
   final class This()(
@@ -924,19 +1052,17 @@ private[core] object Nodes {
       env.getThis
   }
 
-  final class Closure(arrow: Boolean, captureParams: List[Trees.ParamDef],
-      params: List[Trees.ParamDef], restParam: Option[Trees.ParamDef], body: Node,
-      captureValues: List[Node])(
+  final class Closure(arrow: Boolean, body: JSBody, captureValues: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       import executor._
-      val capturesEnv = Env.empty.bind(executor.bindArgs(captureParams, captureValues.map(_.eval())))
+      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[js.Any]
       if (arrow)
-        executor.createJSArrowFunction(stack.currentClassName, "<jscode>", params, restParam, body)(capturesEnv, pos)
+        executor.createJSArrowFunction(stack.currentClassName, "<jscode>", captureEnv, body)
       else
-        executor.createJSThisFunction(stack.currentClassName, "<jscode>", params, restParam, body)(capturesEnv, pos)
+        executor.createJSThisFunction(stack.currentClassName, "<jscode>", captureEnv, body)
     }
   }
 
@@ -950,86 +1076,23 @@ private[core] object Nodes {
 
   // JS class definitions
 
-  final class JSClassDef(
-    classInfo: ClassInfo,
-    classCaptures: List[Trees.ParamDef],
-    superClass: Node,
-    constructorParams: List[Trees.ParamDef],
-    constructorRestParam: Option[Trees.ParamDef],
-    beforeSuperConstructor: List[Node],
-    superConstructorArgs: List[NodeOrJSSpread],
-    afterSuperConstructor: List[Node],
-  )(implicit val executor: Executor, val pos: Position) {
+  final class JSClassDef(classInfo: ClassInfo, superClass: JSBody, constructorBody: JSConstructorBody)(
+      implicit val executor: Executor, val pos: Position) {
 
     def createClass(classCaptureValues: List[js.Any]): js.Dynamic = {
-      implicit val env = Env.empty.bind(executor.bindArgs(classCaptures, classCaptureValues))
+      val captureEnv = classCaptureValues.toArray[js.Any]
 
-      val superClassValue = superClass.eval()
-      val parents = js.Dynamic.literal(ParentClass = superClassValue).asInstanceOf[RawParents]
-
-      @inline
-      def evalBeforeSuper(newTarget: js.Any, args: Seq[js.Any]): Env = {
-        val argsMap = executor.bindJSArgs(constructorParams, constructorRestParam, args)
-        evalStatements(beforeSuperConstructor, env.setNewTarget(newTarget).bind(argsMap))
-      }
-
-      @inline
-      def evalSuperArgs(env: Env): Seq[js.Any] =
-        toScalaVarArgs(evalJSArgList(superConstructorArgs)(env))
-
-      @inline
-      def evalAfterSuper(thiz: js.Any, env: Env): Unit = {
-        attachFields(thiz.asInstanceOf[js.Object])(env, pos)
-        evalStatements(afterSuperConstructor, env.setThis(thiz))
-      }
-
-      class Subclass(preSuperEnv: Env) extends parents.ParentClass(evalSuperArgs(preSuperEnv): _*) {
-        def this(args: js.Any*) = this(evalBeforeSuper(js.`new`.target, args))
-        evalAfterSuper(this, preSuperEnv)
-      }
-      val ctor = js.constructorOf[Subclass]
+      val superClassValue = superClass.eval(captureEnv, None, None, Nil)
+      val ctor = constructorBody.eval(superClassValue, captureEnv)
       executor.setFunctionName(ctor, classInfo.classNameString)
 
       for (staticDef <- classInfo.getCompiledStaticJSMemberDefs())
-        staticDef.createOn(ctor)
+        staticDef.createOn(ctor, captureEnv)
       for (methodPropDef <- classInfo.getCompiledJSMethodPropDefs())
-        methodPropDef.createOn(ctor.prototype)
+        methodPropDef.createOn(ctor.prototype, captureEnv)
 
       ctor
     }
-
-    private def attachFields(target: js.Any)(implicit env: Env, pos: Position): Unit = {
-      if (classInfo.instanceFieldDefs.nonEmpty) {
-        val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(executor.fieldsSymbol)
-        val fields = if (js.isUndefined(existing)) {
-          val fields: Instance.Fields = mutable.Map.empty
-          val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
-          js.Dynamic.global.Object.defineProperty(target, executor.fieldsSymbol, descriptor)
-          fields
-        } else {
-          existing.asInstanceOf[Instance.Fields]
-        }
-
-        classInfo.instanceFieldDefs.foreach {
-          case Trees.FieldDef(flags, Trees.FieldIdent(fieldName), originalName, tpe) =>
-            fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
-        }
-      }
-
-      for (fieldDef <- classInfo.getCompiledJSFieldDefs())
-        fieldDef.createOn(target)
-    }
-  }
-
-  private def evalStatements(stats: List[Node], initialEnv: Env): Env = {
-    var runningEnv: Env = initialEnv
-    stats.foreach {
-      case varDef: VarDef =>
-        runningEnv = runningEnv.bind(varDef.name, varDef.rhs.eval()(runningEnv))
-      case stat =>
-        stat.eval()(runningEnv)
-    }
-    runningEnv
   }
 
   // Exported member definitions
@@ -1037,15 +1100,15 @@ private[core] object Nodes {
   sealed abstract class JSMemberDef()(
       implicit val executor: Executor, val pos: Position) {
 
-    def createOn(target: js.Any)(implicit env: Env): Unit
+    def createOn(target: js.Any, captureEnv: Env.Captures): Unit
   }
 
-  final class JSFieldDef(name: Node, initialValue: js.Any)(
+  final class JSFieldDef(name: JSBody, initialValue: js.Any)(
       implicit executor: Executor, pos: Position)
       extends JSMemberDef {
 
-    def createOn(target: js.Any)(implicit env: Env): Unit = {
-      val fieldName = name.eval()
+    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+      val fieldName = name.eval(captureEnv, None, None, Nil)
       val descriptor = new js.PropertyDescriptor {
         configurable = true
         enumerable = true
@@ -1060,36 +1123,36 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends JSMemberDef
 
-  final class JSMethodDef(owner: ClassInfo, name: Node,
-      params: List[Trees.ParamDef], restParam: Option[Trees.ParamDef], body: Node)(
+  final class JSMethodDef(owner: ClassInfo, name: JSBody,
+      params: List[Trees.ParamDef], restParam: Option[Trees.ParamDef], body: JSBody)(
       implicit executor: Executor, pos: Position)
       extends JSMethodOrPropertyDef {
 
-    def createOn(target: js.Any)(implicit env: Env): Unit = {
-      val methodName = name.eval()
+    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+      val methodName = name.eval(captureEnv, None, None, Nil)
       val methodBody = executor.createJSThisFunction(
-          owner.classNameString, methodName.toString(), params, restParam, body)
+          owner.classNameString, methodName.toString(), captureEnv, body)
       target.asInstanceOf[RawJSValue].jsPropertySet(methodName, methodBody)
     }
   }
 
-  final class JSPropertyDef(owner: ClassInfo, name: Node,
-      getterBody: Option[Node], setterArgAndBody: Option[(Trees.ParamDef, Node)])(
+  final class JSPropertyDef(owner: ClassInfo, name: JSBody,
+      getterBody: Option[JSBody], setterBody: Option[JSBody])(
       implicit executor: Executor, pos: Position)
       extends JSMethodOrPropertyDef {
 
-    def createOn(target: js.Any)(implicit env: Env): Unit = {
-      val propName = name.eval()
+    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+      val propName = name.eval(captureEnv, None, None, Nil)
       val classNameString = owner.classNameString
       val propNameString = propName.toString()
 
       val getterFun = getterBody.map { body =>
-        executor.createJSThisFunction(classNameString, propNameString, Nil, None, body)
+        executor.createJSThisFunction(classNameString, propNameString, captureEnv, body)
           .asInstanceOf[js.Function0[scala.Any]]
       }.orUndefined
 
-      val setterFun = setterArgAndBody.map { argAndBody =>
-        executor.createJSThisFunction(classNameString, propNameString, argAndBody._1 :: Nil, None, argAndBody._2)
+      val setterFun = setterBody.map { body =>
+        executor.createJSThisFunction(classNameString, propNameString, captureEnv, body)
           .asInstanceOf[js.Function1[scala.Any, scala.Any]]
       }.orUndefined
 
