@@ -25,6 +25,8 @@ import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 final class Executor(val interpreter: Interpreter) {
   import Executor._
 
+  import interpreter.getClassInfo
+
   val fieldsSymbol = js.Symbol("fields")
 
   val linkingInfo: js.Object = {
@@ -39,8 +41,68 @@ final class Executor(val interpreter: Interpreter) {
 
   val stack = new Stack()
 
-  def getClassInfo(className: ClassName)(implicit pos: Position): ClassInfo =
-    interpreter.getClassInfo(className)
+  private var _boxedBooleanClassInfo: ClassInfo = null
+  def boxedBooleanClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedBooleanClassInfo == null)
+      _boxedBooleanClassInfo = getClassInfo(BoxedBooleanClass)
+    _boxedBooleanClassInfo
+  }
+
+  private var _boxedCharacterClassInfo: ClassInfo = null
+  def boxedCharacterClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedCharacterClassInfo == null)
+      _boxedCharacterClassInfo = getClassInfo(BoxedCharacterClass)
+    _boxedCharacterClassInfo
+  }
+
+  private var _boxedDoubleClassInfo: ClassInfo = null
+  def boxedDoubleClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedDoubleClassInfo == null)
+      _boxedDoubleClassInfo = getClassInfo(BoxedDoubleClass)
+    _boxedDoubleClassInfo
+  }
+
+  private var _boxedLongClassInfo: ClassInfo = null
+  def boxedLongClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedLongClassInfo == null)
+      _boxedLongClassInfo = getClassInfo(BoxedLongClass)
+    _boxedLongClassInfo
+  }
+
+  private var _boxedStringClassInfo: ClassInfo = null
+  def boxedStringClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedStringClassInfo == null)
+      _boxedStringClassInfo = getClassInfo(BoxedStringClass)
+    _boxedStringClassInfo
+  }
+
+  private var _boxedUnitClassInfo: ClassInfo = null
+  def boxedUnitClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedUnitClassInfo == null)
+      _boxedUnitClassInfo = getClassInfo(BoxedUnitClass)
+    _boxedUnitClassInfo
+  }
+
+  private var _objectClassInfo: ClassInfo = null
+  def objectClassInfo(implicit pos: Position): ClassInfo = {
+    if (_objectClassInfo == null)
+      _objectClassInfo = getClassInfo(ObjectClass)
+    _objectClassInfo
+  }
+
+  private var _throwableClassInfo: ClassInfo = null
+  def throwableClassInfo(implicit pos: Position): ClassInfo = {
+    if (_throwableClassInfo == null)
+      _throwableClassInfo = getClassInfo(ThrowableClass)
+    _throwableClassInfo
+  }
+
+  private var _stackTraceElementClassInfo: ClassInfo = null
+  def stackTraceElementClassInfo(implicit pos: Position): ClassInfo = {
+    if (_stackTraceElementClassInfo == null)
+      _stackTraceElementClassInfo = getClassInfo(StackTraceElementClass)
+    _stackTraceElementClassInfo
+  }
 
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
     for (classInfo <- classInfos) {
@@ -106,12 +168,6 @@ final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def applyMethodDefGeneric(className: ClassName, methodName: MethodName, namespace: MemberNamespace,
-      receiver: Option[js.Any], args: List[js.Any])(
-      implicit pos: Position): js.Any = {
-    applyMethodDefGeneric(interpreter.getClassInfo(className), methodName, namespace, receiver, args)
-  }
-
   def applyMethodDefGeneric(classInfo: ClassInfo, methodName: MethodName, namespace: MemberNamespace,
       receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
@@ -131,10 +187,10 @@ final class Executor(val interpreter: Interpreter) {
           if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
           if (e.pos.isEmpty) -1 else e.pos.line,
         )
-        newInstanceWithConstructor(StackTraceElementClass, stackTraceElementCtor, args)
+        newInstanceWithConstructor(stackTraceElementClassInfo, stackTraceElementCtor, args)
       }
       val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
-      applyMethodDefGeneric(ThrowableClass, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
+      applyMethodDefGeneric(throwableClassInfo, setStackTraceMethodName, MemberNamespace.Public, receiver, List(stackTraceArray))
     }
 
     stack.enter(pos, methodInfo) {
@@ -169,11 +225,6 @@ final class Executor(val interpreter: Interpreter) {
     instance
   }
 
-  def newInstanceWithConstructor(className: ClassName, ctor: MethodName, args: List[js.Any])(
-      implicit pos: Position): Instance = {
-    newInstanceWithConstructor(getClassInfo(className), ctor, args)
-  }
-
   def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodName, args: List[js.Any])(
       implicit pos: Position): Instance = {
     val instance = createNewInstance(classInfo)
@@ -182,7 +233,7 @@ final class Executor(val interpreter: Interpreter) {
   }
 
   def throwVMException(cls: ClassName, message: String)(implicit pos: Position): Nothing = {
-    val ex = newInstanceWithConstructor(cls, stringArgCtor, List(message))
+    val ex = newInstanceWithConstructor(getClassInfo(cls), stringArgCtor, List(message))
     throw js.JavaScriptException(ex)
   }
 
@@ -355,10 +406,10 @@ final class Executor(val interpreter: Interpreter) {
         if (className == ObjectClass) {
           (value => value != null)
         } else {
-          val canBeNumber = interpreter.getClassInfo(BoxedDoubleClass).isSubclass(className)
-          val canBeString = interpreter.getClassInfo(BoxedStringClass).isSubclass(className)
-          val canBeBoolean = interpreter.getClassInfo(BoxedBooleanClass).isSubclass(className)
-          val canBeChar = interpreter.getClassInfo(BoxedCharacterClass).isSubclass(className)
+          val canBeNumber = boxedDoubleClassInfo.isSubclass(className)
+          val canBeString = boxedStringClassInfo.isSubclass(className)
+          val canBeBoolean = boxedBooleanClassInfo.isSubclass(className)
+          val canBeChar = boxedCharacterClassInfo.isSubclass(className)
           val canBeArray = className == CloneableClass || className == SerializableClass
 
           if (!(canBeNumber || canBeString || canBeBoolean || canBeChar || canBeArray)) {
@@ -403,7 +454,7 @@ final class Executor(val interpreter: Interpreter) {
   def getClassOf(typeRef: TypeRef)(implicit pos: Position): js.Any = {
     classOfCache.getOrElseUpdate(typeRef, {
       val typeData = genTypeData(typeRef)
-      newInstanceWithConstructor(ClassClass, anyArgCtor, List(typeData))
+      newInstanceWithConstructor(getClassInfo(ClassClass), anyArgCtor, List(typeData))
     })
   }
 

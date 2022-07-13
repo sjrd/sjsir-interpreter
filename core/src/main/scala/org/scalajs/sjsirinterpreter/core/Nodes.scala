@@ -214,32 +214,31 @@ private[core] object Nodes {
 
   // Scala expressions
 
-  final class New(className: ClassName, ctor: MethodName, args: List[Node])(
+  final class New(classInfo: ClassInfo, ctor: MethodName, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
-      val classInfo = executor.getClassInfo(className)
       val eargs = args.map(_.eval())
       executor.newInstanceWithConstructor(classInfo, ctor, eargs)
     }
   }
 
-  final class LoadModule(className: ClassName)(
+  final class LoadModule(classInfo: ClassInfo)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.loadModule(executor.getClassInfo(className))
+      executor.loadModule(classInfo)
   }
 
-  final class StoreModule(className: ClassName, value: Node)(
+  final class StoreModule(classInfo: ClassInfo, value: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       val instance = value.eval()
-      executor.getClassInfo(className).storeModuleClassInstance(instance)
+      classInfo.storeModuleClassInstance(instance)
     }
   }
 
@@ -274,23 +273,22 @@ private[core] object Nodes {
     }
   }
 
-  final class SelectStatic(className: ClassName, field: FieldName)(
+  final class SelectStatic(classInfo: ClassInfo, field: FieldName)(
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.getClassInfo(className).getStaticField(field)
+      classInfo.getStaticField(field)
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit =
-      executor.getClassInfo(className).setStaticField(field, value)
+      classInfo.setStaticField(field, value)
   }
 
-  final class SelectJSNativeMember(className: ClassName, member: MethodName)(
+  final class SelectJSNativeMember(classInfo: ClassInfo, member: MethodName)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
-      val classInfo = executor.getClassInfo(className)
       val memberDef = classInfo.lookupJSNativeMember(member)
       executor.loadJSNativeLoadSpec(memberDef.jsNativeLoadSpec)
     }
@@ -311,13 +309,13 @@ private[core] object Nodes {
         // SJSIRRepresentiveClass(instance)
         val classInfo = (instance: Any) match {
           case Instance(instance) => instance.classInfo
-          case _: Boolean         => executor.getClassInfo(BoxedBooleanClass)
-          case _: CharInstance    => executor.getClassInfo(BoxedCharacterClass)
-          case _: Double          => executor.getClassInfo(BoxedDoubleClass) // All `number`s use jl.Double, by spec
-          case _: LongInstance    => executor.getClassInfo(BoxedLongClass)
-          case _: String          => executor.getClassInfo(BoxedStringClass)
-          case ()                 => executor.getClassInfo(BoxedUnitClass)
-          case _                  => executor.getClassInfo(ObjectClass)
+          case _: Boolean         => executor.boxedBooleanClassInfo
+          case _: CharInstance    => executor.boxedCharacterClassInfo
+          case _: Double          => executor.boxedDoubleClassInfo // All `number`s use jl.Double, by spec
+          case _: LongInstance    => executor.boxedLongClassInfo
+          case _: String          => executor.boxedStringClassInfo
+          case ()                 => executor.boxedUnitClassInfo
+          case _                  => executor.objectClassInfo
         }
 
         val patchedMethodName = {
@@ -335,7 +333,7 @@ private[core] object Nodes {
 
   /** Apply an instance method with static dispatch (e.g., super calls). */
   final class ApplyStatically(flags: Trees.ApplyFlags, receiver: Node,
-      className: ClassName, methodName: MethodName, args: List[Node])(
+      classInfo: ClassInfo, methodName: MethodName, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
@@ -343,12 +341,12 @@ private[core] object Nodes {
       val instance = receiver.eval()
       val eargs = args.map(_.eval())
       val namespace = MemberNamespace.forNonStaticCall(flags)
-      executor.applyMethodDefGeneric(className, methodName, namespace, Some(instance), eargs)
+      executor.applyMethodDefGeneric(classInfo, methodName, namespace, Some(instance), eargs)
     }
   }
 
   /** Apply a static method. */
-  final class ApplyStatic(flags: Trees.ApplyFlags, className: ClassName,
+  final class ApplyStatic(flags: Trees.ApplyFlags, classInfo: ClassInfo,
       methodName: MethodName, args: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
@@ -356,7 +354,7 @@ private[core] object Nodes {
     override def eval()(implicit env: Env): js.Any = {
       val eargs = args.map(_.eval())
       val namespace = MemberNamespace.forStaticCall(flags)
-      executor.applyMethodDefGeneric(className, methodName, namespace, None, eargs)
+      executor.applyMethodDefGeneric(classInfo, methodName, namespace, None, eargs)
     }
   }
 
@@ -649,20 +647,20 @@ private[core] object Nodes {
       env.getNewTarget
   }
 
-  final class LoadJSConstructor(className: ClassName)(
+  final class LoadJSConstructor(classInfo: ClassInfo)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.loadJSConstructor(executor.getClassInfo(className))
+      executor.loadJSConstructor(classInfo)
   }
 
-  final class LoadJSModule(className: ClassName)(
+  final class LoadJSModule(classInfo: ClassInfo)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.loadJSModule(executor.getClassInfo(className))
+      executor.loadJSModule(classInfo)
   }
 
   final class JSSpread(items: Node)(
@@ -799,13 +797,12 @@ private[core] object Nodes {
     }
   }
 
-  final class CreateJSClass(className: ClassName,
-      captureValues: List[Node])(
+  final class CreateJSClass(classInfo: ClassInfo, captureValues: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.createJSClass(executor.getClassInfo(className), captureValues.map(_.eval()))
+      executor.createJSClass(classInfo, captureValues.map(_.eval()))
   }
 
   // JS class definitions

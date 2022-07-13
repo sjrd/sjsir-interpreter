@@ -11,6 +11,8 @@ import org.scalajs.sjsirinterpreter.core.values.LongInstance
 private[core] final class Compiler(interpreter: Interpreter) {
   private implicit val executor = interpreter.executor
 
+  import interpreter.getClassInfo
+
   private def compileList(trees: List[Tree]): List[n.Node] =
     trees.map(compile(_))
 
@@ -96,31 +98,31 @@ private[core] final class Compiler(interpreter: Interpreter) {
       // Scala expressions
 
       case New(className, ctor, args) =>
-        new n.New(className, ctor.name, args map compile)
+        new n.New(getClassInfo(className), ctor.name, args map compile)
 
       case LoadModule(className) =>
-        new n.LoadModule(className)
+        new n.LoadModule(getClassInfo(className))
 
       case StoreModule(className, value) =>
-        new n.StoreModule(className, compile(value))
+        new n.StoreModule(getClassInfo(className), compile(value))
 
       case Select(qualifier, className, field) =>
         new n.Select(compile(qualifier), className, field.name)
 
       case SelectStatic(className, field) =>
-        new n.SelectStatic(className, field.name)
+        new n.SelectStatic(getClassInfo(className), field.name)
 
       case SelectJSNativeMember(className, member) =>
-        new n.SelectJSNativeMember(className, member.name)
+        new n.SelectJSNativeMember(getClassInfo(className), member.name)
 
       case Apply(flags, receiver, method, args) =>
         new n.Apply(flags, compile(receiver), method.name, compileList(args))
 
       case ApplyStatically(flags, receiver, className, method, args) =>
-        new n.ApplyStatically(flags, compile(receiver), className, method.name, compileList(args))
+        new n.ApplyStatically(flags, compile(receiver), getClassInfo(className), method.name, compileList(args))
 
       case ApplyStatic(flags, className, method, args) =>
-        new n.ApplyStatic(flags, className, method.name, compileList(args))
+        new n.ApplyStatic(flags, getClassInfo(className), method.name, compileList(args))
 
       case UnaryOp(op, lhs) =>
         new n.UnaryOp(op, compile(lhs))
@@ -182,10 +184,10 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.JSNewTarget()
 
       case LoadJSConstructor(className) =>
-        new n.LoadJSConstructor(className)
+        new n.LoadJSConstructor(getClassInfo(className))
 
       case LoadJSModule(className) =>
-        new n.LoadJSModule(className)
+        new n.LoadJSModule(getClassInfo(className))
 
       case JSDelete(qualifier, item) =>
         new n.JSDelete(compile(qualifier), compile(item))
@@ -263,7 +265,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Closure(arrow, captureParams, params, restParam, compile(body), captureValues.map(compile))
 
       case CreateJSClass(className, captureValues) =>
-        new n.CreateJSClass(className, captureValues.map(compile))
+        new n.CreateJSClass(getClassInfo(className), captureValues.map(compile))
 
       // Unexpected trees
 
@@ -289,7 +291,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         val superClassInfo = classInfo.superClass.getOrElse {
           throw new AssertionError(s"No superclass for JS class $classInfo at $pos")
         }
-        new n.LoadJSConstructor(superClassInfo.className)
+        new n.LoadJSConstructor(superClassInfo)
     }
 
     val ctorDef = classDef.memberDefs.find {
