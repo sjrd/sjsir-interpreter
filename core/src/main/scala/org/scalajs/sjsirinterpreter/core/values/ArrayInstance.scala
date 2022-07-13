@@ -11,19 +11,14 @@ import org.scalajs.ir.Types._
 
 import org.scalajs.sjsirinterpreter.core.Types
 
-class ArrayInstance private (val typeRef: ArrayTypeRef, val length: Int) extends js.Object {
-  private val array: Array[js.Any] = {
+class ArrayInstance private (private[core] final val typeRef: ArrayTypeRef, length: Int) extends js.Object {
+  private[core] final val contents: Array[js.Any] = {
     val a = new Array[js.Any](length)
     val zero = if (typeRef.dimensions > 1) null else Types.zeroOfRef(typeRef.base)
     for (i <- 0 until length)
       a(i) = zero
     a
   }
-
-  @JSName("apply")
-  def apply(index: Int): js.Any = array(index)
-
-  def update(index: Int, v: js.Any): Unit = array(index) = v
 
   override def toString(): String = s"${typeRef.displayName}@${hashCode().toHexString}"
 }
@@ -32,7 +27,7 @@ object ArrayInstance {
   def fromList(typeRef: ArrayTypeRef, list: List[js.Any]): ArrayInstance = {
     val instance = new ArrayInstance(typeRef, list.size)
     list.zipWithIndex.foreach {
-      case (element, i) => instance.array(i) = element
+      case (element, i) => instance.contents(i) = element
     }
     instance
   }
@@ -48,16 +43,16 @@ object ArrayInstance {
     if (tailLengths.nonEmpty) {
       val innerTypeRef = ArrayTypeRef(typeRef.base, typeRef.dimensions - 1)
       for (i <- 0 until length)
-        result(i) = createWithDimensions(innerTypeRef, tailLengths)
+        result.contents(i) = createWithDimensions(innerTypeRef, tailLengths)
     }
     result
   }
 
   def clone(other: ArrayInstance): ArrayInstance = {
-    val length = other.length
+    val otherContents = other.contents
+    val length = otherContents.length
     val result = new ArrayInstance(other.typeRef, length)
-    for (i <- 0 until length)
-      result(i) = other(i)
+    System.arraycopy(otherContents, 0, result.contents, 0, length)
     result
   }
 }

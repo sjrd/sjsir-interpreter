@@ -425,7 +425,7 @@ private[core] object Nodes {
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      array.eval().asInstanceOf[ArrayInstance].length
+      array.eval().asInstanceOf[ArrayInstance].contents.length
   }
 
   final class ArraySelect(array: Node, index: Node)(
@@ -435,13 +435,13 @@ private[core] object Nodes {
     override def eval()(implicit env: Env): js.Any = {
       val instance = array.eval.asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
-      instance(i)
+      instance.contents(i)
     }
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
       val instance = array.eval.asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
-      instance(i) = value
+      instance.contents(i) = value
     }
   }
 

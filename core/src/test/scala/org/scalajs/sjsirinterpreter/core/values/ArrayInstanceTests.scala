@@ -8,28 +8,28 @@ object ArrayInstanceTests extends TestSuite{
   val tests = Tests {
     test("basic constructor") {
       val instance = ArrayInstance.createWithDimensions(ArrayTypeRef(IntRef, 1), List(3))
-      instance(0) ==> 0
-      instance(1) ==> 0
-      instance(2) ==> 0
+      instance.contents(0) ==> 0
+      instance.contents(1) ==> 0
+      instance.contents(2) ==> 0
 
-      instance(0) = 10
-      instance(0) ==> 10
+      instance.contents(0) = 10
+      instance.contents(0) ==> 10
     }
 
     test("nested construction") {
       val instance = ArrayInstance.createWithDimensions(ArrayTypeRef(IntRef, 2), List(2, 2))
-      instance(0).asInstanceOf[ArrayInstance](0) ==> 0
-      instance(1).asInstanceOf[ArrayInstance](1) ==> 0
+      instance.contents(0).asInstanceOf[ArrayInstance].contents(0) ==> 0
+      instance.contents(1).asInstanceOf[ArrayInstance].contents(1) ==> 0
 
-      instance(0).asInstanceOf[ArrayInstance](0) = 10
-      instance(0).asInstanceOf[ArrayInstance](0) ==> 10
+      instance.contents(0).asInstanceOf[ArrayInstance].contents(0) = 10
+      instance.contents(0).asInstanceOf[ArrayInstance].contents(0) ==> 10
     }
 
     test("construction from list") {
       val instance = ArrayInstance.fromList(ArrayTypeRef(IntRef, 1), List(1, 2, 3))
-      instance(0) ==> 1
-      instance(1) ==> 2
-      instance(2) ==> 3
+      instance.contents(0) ==> 1
+      instance.contents(1) ==> 2
+      instance.contents(2) ==> 3
     }
 
     test("incorrect params") {
