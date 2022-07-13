@@ -18,7 +18,6 @@ import org.scalajs.ir.ClassKind._
 import org.scalajs.linker.interface.ModuleInitializer
 
 import org.scalajs.sjsirinterpreter.core.values._
-import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 /** Main execution engine */
 final class Executor(val interpreter: Interpreter) {

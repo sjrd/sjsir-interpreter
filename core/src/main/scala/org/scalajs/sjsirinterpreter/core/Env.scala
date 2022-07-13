@@ -4,8 +4,6 @@ import scala.scalajs.js
 
 import org.scalajs.ir.Names.LocalName
 
-import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
-
 // class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any]) extends js.Object {
 class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any], newTarget: Option[js.Any]) {
 
@@ -30,20 +28,29 @@ class Env(table: Map[LocalName, EnvVar], ths: Option[js.Any], newTarget: Option[
   def setThis(instance: js.Any): Env =
     setThis(Some(instance))
 
-  def getThis: js.Any =
-    ths.getOrThrow("No THIS in current Env")
+  def getThis: js.Any = {
+    ths.getOrElse {
+      throw new AssertionError("No `this` in the current Env")
+    }
+  }
 
   def setNewTarget(target: js.Any): Env =
     new Env(table, ths, Some(target))
 
-  def getNewTarget: js.Any =
-    newTarget.getOrThrow("No `new.target` in the current Env")
+  def getNewTarget: js.Any = {
+    newTarget.getOrElse {
+      throw new AssertionError("No `new.target` in the current Env")
+    }
+  }
 
   override def toString(): String =
     table.toString()
 
-  private def lookup(name: LocalName): EnvVar =
-    table.get(name).getOrThrow(s"No variable $name in Env")
+  private def lookup(name: LocalName): EnvVar = {
+    table.getOrElse(name, {
+      throw new AssertionError(s"No variable `${name.nameString}` in the current Env")
+    })
+  }
 }
 
 object Env {

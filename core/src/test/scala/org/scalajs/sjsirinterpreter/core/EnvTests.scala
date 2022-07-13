@@ -36,7 +36,7 @@ object EnvTests extends TestSuite{
       val e = intercept[java.lang.AssertionError] {
         env.get(ident)
       }
-      e.getMessage() ==> "No variable LocalName<x> in Env"
+      e.getMessage() ==> "No variable `x` in the current Env"
     }
 
     // test("this binding") {
@@ -51,7 +51,7 @@ object EnvTests extends TestSuite{
       val e = intercept[java.lang.AssertionError] {
         env.getThis
       }
-      e.getMessage() ==> "No THIS in current Env"
+      e.getMessage() ==> "No `this` in the current Env"
     }
   }
 }

@@ -10,7 +10,6 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core._
-import org.scalajs.sjsirinterpreter.core.utils.Utils.OptionsOps
 
 trait Instance extends js.Object {
   @JSName(Instance.instanceClassInfo)
@@ -76,7 +75,10 @@ object Instance {
     def setField(field: (ClassName, FieldName), value: js.Any) =
       self.fields.update(field, value)
 
-    def getField(field: (ClassName, FieldName)): js.Any =
-      self.fields.get(field).getOrThrow(s"Instance doesn't have $field")
+    def getField(field: (ClassName, FieldName)): js.Any = {
+      self.fields.getOrElse(field, {
+        throw new AssertionError(s"Instance doesn't have $field")
+      })
+    }
   }
 }
