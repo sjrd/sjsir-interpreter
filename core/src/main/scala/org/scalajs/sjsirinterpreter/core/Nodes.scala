@@ -644,13 +644,13 @@ private[core] object Nodes {
       extends AssignLhs {
 
     override def eval()(implicit env: Env): js.Any = {
-      val instance = array.eval.asInstanceOf[ArrayInstance]
+      val instance = array.eval().asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
       instance.contents(i)
     }
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
-      val instance = array.eval.asInstanceOf[ArrayInstance]
+      val instance = array.eval().asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
       instance.contents(i) = value
     }
@@ -731,7 +731,7 @@ private[core] object Nodes {
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
-      val ctorValue = ctor.eval.asInstanceOf[js.Dynamic]
+      val ctorValue = ctor.eval().asInstanceOf[js.Dynamic]
       val eargs = evalJSArgList(args)
       executor.stack.enterJSCode(pos) {
         js.Dynamic.newInstance(ctorValue)(scala.scalajs.runtime.toScalaVarArgs(eargs): _*)
@@ -746,7 +746,7 @@ private[core] object Nodes {
     private val fieldKey = (className, field)
 
     override def eval()(implicit env: Env): js.Any = {
-      val obj = qualifier.eval.asInstanceOf[RawJSValue]
+      val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[Instance.Fields]
       fields.getOrElse(fieldKey, {
         throw js.JavaScriptException(
@@ -755,7 +755,7 @@ private[core] object Nodes {
     }
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
-      val obj = qualifier.eval.asInstanceOf[RawJSValue]
+      val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[Instance.Fields]
       fields(fieldKey) = value
     }
@@ -766,13 +766,13 @@ private[core] object Nodes {
       extends AssignLhs {
 
     override def eval()(implicit env: Env): js.Any = {
-      val obj = qualifier.eval.asInstanceOf[RawJSValue]
+      val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val prop = item.eval()
       obj.jsPropertyGet(prop)
     }
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
-      val obj = qualifier.eval.asInstanceOf[RawJSValue]
+      val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val prop = item.eval()
       obj.jsPropertySet(prop, value)
     }

@@ -1,6 +1,13 @@
 inThisBuild(Def.settings(
   scalaVersion := "2.13.8",
   version := "0.1.0-SNAPSHOT",
+
+  scalacOptions ++= Seq(
+    "-encoding", "utf-8",
+    "-deprecation",
+    "-feature",
+    "-Xfatal-warnings",
+  ),
 ))
 
 val fetchScalaJSSource = taskKey[File]("Fetches the source code of Scala.js")
@@ -148,6 +155,8 @@ lazy val `scalajs-test-suite` = project
     },
 
     libraryDependencies += "org.scala-js" %% "scalajs-junit-test-runtime" % scalaJSVersion,
+
+    scalacOptions --= Seq("-deprecation", "-Xfatal-warnings"),
 
     Compile / unmanagedSourceDirectories ++= {
       val base = (fetchScalaJSSource / artifactPath).value
