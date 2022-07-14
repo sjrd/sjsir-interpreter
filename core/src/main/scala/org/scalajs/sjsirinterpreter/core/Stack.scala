@@ -9,6 +9,7 @@ private[core] final class Stack {
   import Stack._
 
   val elements = js.Array[Element]()
+  private var elementCount: Int = 0
   var currentClassName: String = null
   var currentMethodName: String = null
 
@@ -28,7 +29,9 @@ private[core] final class Stack {
   def enter[A](callSitePos: Position, className: String, methodName: String)(body: => A): A = {
     val prevClassName = currentClassName
     val prevMethodName = currentMethodName
-    elements.push(new Element(prevClassName, prevMethodName, callSitePos))
+    val elemCount = elementCount
+    elements(elemCount) = new Element(prevClassName, prevMethodName, callSitePos)
+    elementCount = elemCount + 1
     try {
       currentClassName = className
       currentMethodName = methodName
@@ -36,7 +39,7 @@ private[core] final class Stack {
     } finally {
       currentClassName = prevClassName
       currentMethodName = prevMethodName
-      elements.pop()
+      elementCount = elemCount
     }
   }
 
@@ -46,7 +49,7 @@ private[core] final class Stack {
 
   def captureStackTrace(pos: Position): List[Element] = {
     var result: List[Element] = Nil
-    for (i <- 0 until elements.length)
+    for (i <- 0 until elementCount)
       result ::= elements(i)
     result ::= new Element(currentClassName, currentMethodName, pos)
     result

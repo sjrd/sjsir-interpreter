@@ -175,22 +175,8 @@ private[core] final class Executor(val interpreter: Interpreter) {
   def applyMethodDefGeneric(methodInfo: MethodInfo, receiver: Option[js.Any], args: List[js.Any])(
       implicit pos: Position): js.Any = {
 
-    if (methodInfo.isTheFillInStackTraceMethodName) {
-      val th = receiver.get
-      val stackTrace = stack.captureStackTrace(pos)
-      val stackTraceElements = stackTrace.map { e =>
-        val args: List[js.Any] = List(
-          if (e.className == null) "<jscode>" else e.className,
-          if (e.methodName == null) "<jscode>" else e.methodName,
-          if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
-          if (e.pos.isEmpty) -1 else e.pos.line,
-        )
-        newInstanceWithConstructor(stackTraceElementCtorInfo, args)
-      }
-      val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
-      val setStackTraceMethodInfo = th.asInstanceOf[Instance].classInfo.lookupPublicMethod(setStackTraceMethodName)
-      applyMethodDefGeneric(setStackTraceMethodInfo, receiver, List(stackTraceArray))
-    }
+    if (methodInfo.isTheFillInStackTraceMethodName)
+      performFillInStackTrace(receiver)
 
     stack.enter(pos, methodInfo) {
       val compiledBody = methodInfo.getCompiledBody {
@@ -199,6 +185,23 @@ private[core] final class Executor(val interpreter: Interpreter) {
       }
       compiledBody.eval(receiver, args)
     }
+  }
+
+  private def performFillInStackTrace(receiver: Option[js.Any])(implicit pos: Position): Unit = {
+    val th = receiver.get
+    val stackTrace = stack.captureStackTrace(pos)
+    val stackTraceElements = stackTrace.map { e =>
+      val args: List[js.Any] = List(
+        if (e.className == null) "<jscode>" else e.className,
+        if (e.methodName == null) "<jscode>" else e.methodName,
+        if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
+        if (e.pos.isEmpty) -1 else e.pos.line,
+      )
+      newInstanceWithConstructor(stackTraceElementCtorInfo, args)
+    }
+    val stackTraceArray = ArrayInstance.fromList(ArrayTypeRef(ClassRef(StackTraceElementClass), 1), stackTraceElements)
+    val setStackTraceMethodInfo = th.asInstanceOf[Instance].classInfo.lookupPublicMethod(setStackTraceMethodName)
+    applyMethodDefGeneric(setStackTraceMethodInfo, receiver, List(stackTraceArray))
   }
 
   def createNewInstance(classInfo: ClassInfo)(implicit pos: Position): Instance = {

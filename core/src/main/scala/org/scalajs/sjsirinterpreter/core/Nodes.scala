@@ -415,27 +415,37 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
+    private val isToString = method == toStringMethodName
+    private val isNumberCompareToMethod = numberCompareToMethodNames.contains(method)
+
     override def eval()(implicit env: Env): js.Any = {
       val instance = receiver.eval()
       if (instance == null) {
         executor.throwVMException(NullPointerExceptionClass, s"null.${method.displayName}")
-      } else if (method == toStringMethodName && !Instance.is(instance)) {
-        instance.toString()
+      } else if (isToString) {
+        // args is empty by construction in this case
+        instance match {
+          case Instance(instance) =>
+            val methodInfo = instance.classInfo.lookupPublicMethod(method)
+            executor.applyMethodDefGeneric(methodInfo, Some(instance), Nil)
+          case _ =>
+            instance.toString()
+        }
       } else {
         // SJSIRRepresentiveClass(instance)
         val classInfo = (instance: Any) match {
           case Instance(instance) => instance.classInfo
-          case _: Boolean         => executor.boxedBooleanClassInfo
-          case _: CharInstance    => executor.boxedCharacterClassInfo
-          case _: Double          => executor.boxedDoubleClassInfo // All `number`s use jl.Double, by spec
-          case _: LongInstance    => executor.boxedLongClassInfo
           case _: String          => executor.boxedStringClassInfo
+          case _: Double          => executor.boxedDoubleClassInfo // All `number`s use jl.Double, by spec
+          case _: Boolean         => executor.boxedBooleanClassInfo
+          case _: LongInstance    => executor.boxedLongClassInfo
+          case _: CharInstance    => executor.boxedCharacterClassInfo
           case ()                 => executor.boxedUnitClassInfo
           case _                  => executor.objectClassInfo
         }
 
         val patchedMethodName = {
-          if (classInfo.className == BoxedDoubleClass && numberCompareToMethodNames.contains(method))
+          if (isNumberCompareToMethod && classInfo.className == BoxedDoubleClass)
             doubleCompareToMethodName
           else
             method
