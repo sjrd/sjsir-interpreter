@@ -104,12 +104,6 @@ lazy val reversi = project
     scalaJSUseMainModuleInitializer := true
   )
 
-/** Tests from the Scala.js test suite that are ignored because they are way too slow. */
-val ignoredScalaJSTestClasses: Set[String] = Set(
-  // `createFromLargeCodePointArray_Issue2553` and `createFromLargeCharArray_Issue2553` (20-30s each)
-  "org.scalajs.testsuite.javalib.lang.StringTest",
-)
-
 lazy val `scalajs-test-suite` = project
   .in(file("scalajs-test-suite"))
   .enablePlugins(ScalaJSPlugin, ScalaJSJUnitPlugin)
@@ -208,6 +202,4 @@ lazy val `scalajs-test-suite` = project
     },
 
     Test / testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
-
-    Test / testOptions += Tests.Filter(!ignoredScalaJSTestClasses.contains(_)),
   )
