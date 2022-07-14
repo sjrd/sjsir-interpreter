@@ -16,20 +16,20 @@ private[core] trait Instance extends js.Object {
   val classInfo: ClassInfo
 
   @JSName(Instance.instanceFields)
-  val fields: Instance.Fields
+  val fields: Array[js.Any]
 }
 
 private[core] object Instance {
   val instanceClassInfo: js.Symbol = js.Symbol("classInfo")
   val instanceFields: js.Symbol = js.Symbol("fields")
 
-  type Fields = mutable.Map[(ClassName, FieldName), js.Any]
-
   private abstract class ObjectInstance extends js.Object
 
   private abstract class ThrowableInstance extends js.Error
 
   def newInstanceClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
+    val fieldsTemplate = classInfo.fieldsTemplate
+
     @inline
     def createCoreFields(obj: js.Object): Unit = {
       js.Dynamic.global.Object.defineProperty(obj, instanceClassInfo, new js.PropertyDescriptor {
@@ -43,7 +43,7 @@ private[core] object Instance {
         configurable = false
         enumerable = false
         writable = false
-        value = (mutable.Map.empty: Fields)
+        value = fieldsTemplate.clone()
       })
     }
 
@@ -69,16 +69,5 @@ private[core] object Instance {
   class InstanceOpt private[Instance] (private val x: Any) extends AnyVal {
     @inline def isEmpty: Boolean = !is(x)
     @inline def get: Instance = x.asInstanceOf[Instance]
-  }
-
-  implicit class InstanceOps(private val self: Instance) extends AnyVal {
-    def setField(field: (ClassName, FieldName), value: js.Any) =
-      self.fields.update(field, value)
-
-    def getField(field: (ClassName, FieldName)): js.Any = {
-      self.fields.getOrElse(field, {
-        throw new AssertionError(s"Instance doesn't have $field")
-      })
-    }
   }
 }

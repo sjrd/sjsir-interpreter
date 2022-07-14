@@ -108,6 +108,44 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     _instanceFieldDefs
   }
 
+  private var _totalFieldCount: Int = -1
+  def totalFieldCount(implicit pos: Position): Int = {
+    if (_totalFieldCount < 0)
+      _totalFieldCount = superClass.fold(0)(_.totalFieldCount) + instanceFieldDefs.size
+    _totalFieldCount
+  }
+
+  private var _fieldsTemplate: Array[js.Any] = null
+  def fieldsTemplate(implicit pos: Position): Array[js.Any] = {
+    if (_fieldsTemplate == null) {
+      val superTemplate = superClass.fold(new Array[js.Any](0))(_.fieldsTemplate)
+      val template = java.util.Arrays.copyOf(superTemplate, totalFieldCount)
+      var nextIndex = superTemplate.length
+      for (fieldDef <- instanceFieldDefs) {
+        template(nextIndex) = Types.zeroOf(fieldDef.ftpe)
+        nextIndex += 1
+      }
+      _fieldsTemplate = template
+    }
+    _fieldsTemplate
+  }
+
+  private var _fieldIndices: Map[FieldName, Int] = null
+  def fieldDefIndices(implicit pos: Position): Map[FieldName, Int] = {
+    if (_fieldIndices == null) {
+      val builder = Map.newBuilder[FieldName, Int]
+      var nextIndex = superClass.fold(0)(_.totalFieldCount)
+
+      for (fieldDef <- instanceFieldDefs) {
+        builder += fieldDef.name.name -> nextIndex
+        nextIndex += 1
+      }
+
+      _fieldIndices = builder.result()
+    }
+    _fieldIndices
+  }
+
   private var _directMethods: Array[mutable.Map[MethodName, MethodInfo]] = null
   private def directMethods(namespace: MemberNamespace): collection.Map[MethodName, MethodInfo] = {
     if (_directMethods == null) {

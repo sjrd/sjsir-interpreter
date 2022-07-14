@@ -132,7 +132,8 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.StoreModule(getClassInfo(className), compile(value))
 
       case Select(qualifier, className, field) =>
-        new n.Select(compile(qualifier), className, field.name)
+        val fieldIndex = getClassInfo(className).fieldDefIndices.apply(field.name)
+        new n.Select(compile(qualifier), field.name.nameString, fieldIndex)
 
       case SelectStatic(className, field) =>
         new n.SelectStatic(getClassInfo(className), field.name)

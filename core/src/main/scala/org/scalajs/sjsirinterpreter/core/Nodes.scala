@@ -19,6 +19,8 @@ import org.scalajs.sjsirinterpreter.core.values._
 import Executor._
 
 private[core] object Nodes {
+  private type JSClassPrivateFields = mutable.Map[(ClassName, FieldName), js.Any]
+
   final class Body(localCount: Int, tree: Node) {
     def eval(receiver: Option[js.Any], args: List[js.Any]): js.Any = {
       val env = new Env(Env.emptyCaptures, localCount)
@@ -136,12 +138,12 @@ private[core] object Nodes {
       if (classInfo.instanceFieldDefs.nonEmpty) {
         val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(executor.fieldsSymbol)
         val fields = if (js.isUndefined(existing)) {
-          val fields: Instance.Fields = mutable.Map.empty
+          val fields: JSClassPrivateFields = mutable.Map.empty
           val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
           js.Dynamic.global.Object.defineProperty(target, executor.fieldsSymbol, descriptor)
           fields
         } else {
-          existing.asInstanceOf[Instance.Fields]
+          existing.asInstanceOf[JSClassPrivateFields]
         }
 
         classInfo.instanceFieldDefs.foreach {
@@ -358,19 +360,17 @@ private[core] object Nodes {
     }
   }
 
-  final class Select(qualifier: Node, className: ClassName, field: FieldName)(
+  final class Select(qualifier: Node, fieldNameString: String, fieldIndex: Int)(
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
-
-    private val fieldKey = (className, field)
 
     override def eval()(implicit env: Env): js.Any = {
       qualifier.eval() match {
         case Instance(instance) =>
-          instance.getField(fieldKey)
+          instance.fields(fieldIndex)
         case null =>
           executor.throwVMException(NullPointerExceptionClass,
-              s"null.${field.nameString}")
+              s"null.$fieldNameString")
         case rest =>
           throw new AssertionError(s"Unexpected value $rest in Select node at $pos")
       }
@@ -379,10 +379,10 @@ private[core] object Nodes {
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
       qualifier.eval() match {
         case Instance(instance) =>
-          instance.setField(fieldKey, value)
+          instance.fields(fieldIndex) = value
         case null =>
           executor.throwVMException(NullPointerExceptionClass,
-              s"null.${field.nameString} = ...")
+              s"null.$fieldNameString = ...")
         case rest =>
           throw new AssertionError(s"Unexpected value $rest in Select node at $pos")
       }
@@ -716,7 +716,7 @@ private[core] object Nodes {
       value match {
         case Instance(value) =>
           val result = executor.createNewInstance(value.classInfo)
-          result.fields ++= value.fields
+          System.arraycopy(value.fields, 0, result.fields, 0, result.fields.length)
           result
         case value: ArrayInstance =>
           ArrayInstance.clone(value)
@@ -757,7 +757,7 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
-      val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[Instance.Fields]
+      val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
       fields.getOrElse(fieldKey, {
         throw js.JavaScriptException(
             new js.TypeError(s"Cannot find field ${className.nameString}::${field.nameString}"))
@@ -766,7 +766,7 @@ private[core] object Nodes {
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
-      val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[Instance.Fields]
+      val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
       fields(fieldKey) = value
     }
   }

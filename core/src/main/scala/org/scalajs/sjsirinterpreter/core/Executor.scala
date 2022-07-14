@@ -214,10 +214,6 @@ private[core] final class Executor(val interpreter: Interpreter) {
 
     val instance = js.Dynamic.newInstance(jsClass)().asInstanceOf[Instance]
     classInfo.forEachAncestorClass { superclassInfo =>
-      superclassInfo.instanceFieldDefs.foreach {
-        case FieldDef(_, FieldIdent(fieldName), _, tpe) =>
-          instance.setField((superclassInfo.className, fieldName), Types.zeroOf(tpe))
-      }
       for (methodPropDef <- superclassInfo.getCompiledJSMethodPropDefs())
         methodPropDef.createOn(instance, Env.emptyCaptures)
     }
