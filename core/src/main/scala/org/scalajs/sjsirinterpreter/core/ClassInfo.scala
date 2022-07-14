@@ -54,13 +54,19 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   private var _ancestorsIncludingThis: List[ClassInfo] = null
   def ancestorsIncludingThis(implicit pos: Position): List[ClassInfo] = {
-    val parents = superClass.fold(interfaces)(_ :: interfaces)
-    this :: parents.flatMap(_.ancestorsIncludingThis).distinct
+    if (_ancestorsIncludingThis == null) {
+      val parents = superClass.fold(interfaces)(_ :: interfaces)
+      _ancestorsIncludingThis = this :: parents.flatMap(_.ancestorsIncludingThis).distinct
+    }
+    _ancestorsIncludingThis
   }
 
   private var _ancestorsForSubclassLookup: Set[ClassName] = null
-  def ancestorsForSubclassLookup(implicit pos: Position): Set[ClassName] =
-    (ObjectClass :: ancestorsIncludingThis.map(_.className)).toSet
+  def ancestorsForSubclassLookup(implicit pos: Position): Set[ClassName] = {
+    if (_ancestorsForSubclassLookup == null)
+      _ancestorsForSubclassLookup = (ObjectClass :: ancestorsIncludingThis.map(_.className)).toSet
+    _ancestorsForSubclassLookup
+  }
 
   def isSubclass(that: ClassName)(implicit pos: Position): Boolean =
     ancestorsForSubclassLookup.contains(that)

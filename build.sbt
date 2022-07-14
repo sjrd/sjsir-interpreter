@@ -106,16 +106,8 @@ lazy val reversi = project
 
 /** Tests from the Scala.js test suite that are ignored because they are way too slow. */
 val ignoredScalaJSTestClasses: Set[String] = Set(
-  // `createFromLargeCodePointArray_Issue2553` and `createFromLargeCharArray_Issue2553` (60s each)
+  // `createFromLargeCodePointArray_Issue2553` and `createFromLargeCharArray_Issue2553` (20-30s each)
   "org.scalajs.testsuite.javalib.lang.StringTest",
-
-  // These use a test-only data structure that is inefficient almost by design; they take minutes
-  "org.scalajs.testsuite.javalib.util.AbstractListTest",
-  "org.scalajs.testsuite.javalib.util.CollectionsOnAbstractListTest",
-  "org.scalajs.testsuite.javalib.util.CollectionsOnCheckedCollectionAbstractListTest",
-  "org.scalajs.testsuite.javalib.util.CollectionsOnCheckedListAbstractListTest",
-  "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedCollectionAbstractListTest",
-  "org.scalajs.testsuite.javalib.util.CollectionsOnSynchronizedListAbstractListTest",
 )
 
 lazy val `scalajs-test-suite` = project
