@@ -53,11 +53,25 @@ private[core] final class Executor(val interpreter: Interpreter) {
     _boxedCharacterClassInfo
   }
 
-  private var _boxedDoubleClassInfo: ClassInfo = null
-  def boxedDoubleClassInfo(implicit pos: Position): ClassInfo = {
-    if (_boxedDoubleClassInfo == null)
-      _boxedDoubleClassInfo = getClassInfo(BoxedDoubleClass)
-    _boxedDoubleClassInfo
+  private var _boxedByteClassInfo: ClassInfo = null
+  def boxedByteClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedByteClassInfo == null)
+      _boxedByteClassInfo = getClassInfo(BoxedByteClass)
+    _boxedByteClassInfo
+  }
+
+  private var _boxedShortClassInfo: ClassInfo = null
+  def boxedShortClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedShortClassInfo == null)
+      _boxedShortClassInfo = getClassInfo(BoxedShortClass)
+    _boxedShortClassInfo
+  }
+
+  private var _boxedIntegerClassInfo: ClassInfo = null
+  def boxedIntegerClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedIntegerClassInfo == null)
+      _boxedIntegerClassInfo = getClassInfo(BoxedIntegerClass)
+    _boxedIntegerClassInfo
   }
 
   private var _boxedLongClassInfo: ClassInfo = null
@@ -65,6 +79,20 @@ private[core] final class Executor(val interpreter: Interpreter) {
     if (_boxedLongClassInfo == null)
       _boxedLongClassInfo = getClassInfo(BoxedLongClass)
     _boxedLongClassInfo
+  }
+
+  private var _boxedFloatClassInfo: ClassInfo = null
+  def boxedFloatClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedFloatClassInfo == null)
+      _boxedFloatClassInfo = getClassInfo(BoxedFloatClass)
+    _boxedFloatClassInfo
+  }
+
+  private var _boxedDoubleClassInfo: ClassInfo = null
+  def boxedDoubleClassInfo(implicit pos: Position): ClassInfo = {
+    if (_boxedDoubleClassInfo == null)
+      _boxedDoubleClassInfo = getClassInfo(BoxedDoubleClass)
+    _boxedDoubleClassInfo
   }
 
   private var _boxedStringClassInfo: ClassInfo = null

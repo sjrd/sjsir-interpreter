@@ -697,18 +697,18 @@ private[core] object Nodes {
       import executor.getClassOf
 
       (expr.eval(): Any) match {
-        case Instance(instance)   => getClassOf(ClassRef(instance.classInfo.className))
+        case Instance(instance)   => getClassOf(instance.classInfo.typeRef)
         case array: ArrayInstance => getClassOf(array.typeRef)
-        case _: LongInstance      => getClassOf(ClassRef(BoxedLongClass))
-        case _: CharInstance      => getClassOf(ClassRef(BoxedCharacterClass))
-        case _: String            => getClassOf(ClassRef(BoxedStringClass))
-        case _: Byte              => getClassOf(ClassRef(BoxedByteClass))
-        case _: Short             => getClassOf(ClassRef(BoxedShortClass))
-        case _: Int               => getClassOf(ClassRef(BoxedIntegerClass))
-        case _: Float             => getClassOf(ClassRef(BoxedFloatClass))
-        case _: Double            => getClassOf(ClassRef(BoxedDoubleClass))
-        case _: Boolean           => getClassOf(ClassRef(BoxedBooleanClass))
-        case ()                   => getClassOf(ClassRef(BoxedUnitClass))
+        case _: LongInstance      => getClassOf(executor.boxedLongClassInfo.typeRef)
+        case _: CharInstance      => getClassOf(executor.boxedCharacterClassInfo.typeRef)
+        case _: String            => getClassOf(executor.boxedStringClassInfo.typeRef)
+        case _: Byte              => getClassOf(executor.boxedByteClassInfo.typeRef)
+        case _: Short             => getClassOf(executor.boxedShortClassInfo.typeRef)
+        case _: Int               => getClassOf(executor.boxedIntegerClassInfo.typeRef)
+        case _: Float             => getClassOf(executor.boxedFloatClassInfo.typeRef)
+        case _: Double            => getClassOf(executor.boxedDoubleClassInfo.typeRef)
+        case _: Boolean           => getClassOf(executor.boxedBooleanClassInfo.typeRef)
+        case ()                   => getClassOf(executor.boxedUnitClassInfo.typeRef)
         case _                    => null
       }
     }
