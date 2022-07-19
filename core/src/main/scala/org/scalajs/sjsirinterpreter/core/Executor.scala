@@ -467,95 +467,117 @@ private[core] final class Executor(val interpreter: Interpreter) {
 
   //   def getSuperclass(): Class[_ >: A] = js.native
 
-  def genTypeData(typeRef: TypeRef)(implicit pos: Position): js.Any = {
-    val typeData = genTypeDataObject(typeRef).asInstanceOf[js.Dynamic]
+  def genTypeData(typeRef: TypeRef)(implicit pos: Position): TypeData = {
+    val typeRef0 = typeRef
+    val arrayOfThisTypeRef = ArrayTypeRef.of(typeRef)
 
-    typeData.internalTypeRef = typeRef.asInstanceOf[js.Any]
+    typeRef match {
+      case primRef: PrimRef =>
+        val isInstanceFun = getIsInstanceOfFun(primRef.tpe)
 
-    typeData.updateDynamic("isInstance")({ (obj: js.Object) =>
-      typeRef match {
-        case PrimRef(_) =>
-          false
-        case ClassRef(className) =>
-          val classInfo = interpreter.getClassInfo(className)
-          classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))(obj)
-        case typeRef: ArrayTypeRef =>
-          getIsInstanceOfFun(ArrayType(typeRef))(pos)(obj)
-      }
-    } : js.Function1[js.Object, js.Any])
+        new TypeData {
+          val typeRef = typeRef0
 
-    typeData.updateDynamic("isAssignableFrom")({ (that: js.Dynamic) =>
-      val thatTypeRef = that.internalTypeRef.asInstanceOf[TypeRef]
-      isAssignableFrom(typeRef, thatTypeRef)
-    }: js.Function1[js.Dynamic, Boolean])
+          val name = primRef.displayName
+          val isPrimitive = true
+          val isInterface = false
+          val isArrayClass = false
 
-    typeData.updateDynamic("checkCast")({ (obj: js.Any) =>
-      implicit val pos = NoPosition
-      typeRef match {
-        case ClassRef(ObjectClass) =>
-          () // OK
-        case ClassRef(className) =>
-          val classInfo = interpreter.getClassInfo(className)
-          if (classInfo.kind.isJSType || obj == null || getIsInstanceOfFun(ClassType(className))(pos)(obj))
-            () // OK
-          else
-            throwVMException(ClassCastExceptionClass, s"$obj cannot be cast to ${className.nameString}")
-        case typeRef: ArrayTypeRef =>
-          if (obj == null || getIsInstanceOfFun(ArrayType(typeRef))(pos)(obj))
-            () // OK
-          else
-            throwVMException(ClassCastExceptionClass, s"$obj cannot be cast to ${typeRef.show()}")
-        case _: PrimRef =>
-          throwVMException(ClassCastExceptionClass, s"cannot cast to primitive type ${typeRef.displayName}")
-      }
-    }: js.Function1[js.Any, Unit])
+          def isInstance(that: js.Any): Boolean =
+            false
 
-    typeData.updateDynamic("newArrayOfThisClass")({ (args: js.Array[Int]) =>
-      ArrayInstance.createWithDimensions(ArrayTypeRef.of(typeRef), args.toList)
-    } : js.Function1[js.Array[Int], js.Any])
+          def isAssignableFrom(that: TypeData): Boolean =
+            this eq that
 
-    typeData.updateDynamic("getComponentType")({ () =>
-      typeRef match {
-        case ArrayTypeRef(base, 1)          => getClassOf(base)
-        case ArrayTypeRef(base, dimensions) => getClassOf(ArrayTypeRef(base, dimensions - 1))
-        case _                              => null
-      }
-    } : js.Function0[js.Any])
+          def checkCast(value: js.Any): Unit =
+            throwVMException(ClassCastExceptionClass, s"cannot cast to primitive type ${typeRef.displayName}")
 
-    typeData
-  }
+          def newArrayOfThisClass(lengths: js.Array[Int]): js.Any =
+            ArrayInstance.createWithDimensions(arrayOfThisTypeRef, lengths.toList)
 
-  private def noIsInstance(): Nothing = {
-    throw js.JavaScriptException(
-        new js.TypeError("Cannot call isInstance() on a Class representing a JS trait/object"))
-  }
+          def getComponentType(): js.Any = null
+        }
 
-  private def isAssignableFrom(target: TypeRef, source: TypeRef)(implicit pos: Position): Boolean = {
-    def isSubclass(lhs: ClassName, rhs: ClassName): Boolean =
-      interpreter.getClassInfo(lhs).isSubclass(rhs)
+      case ClassRef(className) =>
+        val classInfo = getClassInfo(className)
+        val isInstanceFun = getIsInstanceOfFun(ClassType(className))
+        val isAssignableFromArray = className match {
+          case ObjectClass | SerializableClass | CloneableClass => true
+          case _                                                => false
+        }
+        val checkCastAlwaysOK = className == ObjectClass || classInfo.kind.isJSType
 
-    (target == source) || {
-      (target, source) match {
-        case (ClassRef(targetCls), ClassRef(sourceCls)) =>
-          isSubclass(sourceCls, targetCls)
-        case (ClassRef(ObjectClass | SerializableClass | CloneableClass), ArrayTypeRef(_, _)) =>
-          true
-        case (target: ArrayTypeRef, source: ArrayTypeRef) =>
-          isSubtype(ArrayType(source), ArrayType(target))(isSubclass(_, _))
-        case _ =>
-          false
-      }
+        new TypeData {
+          val typeRef = typeRef0
+
+          val name = classInfo.runtimeClassName
+          val isPrimitive = false
+          val isInterface = classInfo.kind == Interface
+          val isArrayClass = false
+
+          def isInstance(that: js.Any): Boolean =
+            isInstanceFun(that)
+
+          def isAssignableFrom(that: TypeData): Boolean = {
+            that.typeRef match {
+              case ClassRef(thatClassName) =>
+                getClassInfo(thatClassName).isSubclass(className)
+              case thatTypeRef =>
+                isAssignableFromArray && thatTypeRef.isInstanceOf[ArrayTypeRef]
+            }
+          }
+
+          def checkCast(value: js.Any): Unit = {
+            if (!(checkCastAlwaysOK || value == null || isInstanceFun(value)))
+              throwVMException(ClassCastExceptionClass, s"$value is not an instance of $name")
+          }
+
+          def newArrayOfThisClass(lengths: js.Array[Int]): js.Any =
+            ArrayInstance.createWithDimensions(arrayOfThisTypeRef, lengths.toList)
+
+          def getComponentType(): js.Any = null
+        }
+
+      case arrRef @ ArrayTypeRef(base, dimensions) =>
+        val thisArrayType = ArrayType(arrRef)
+        val isInstanceFun = getIsInstanceOfFun(thisArrayType)
+        val componentType =
+          if (dimensions == 1) getClassOf(base)
+          else getClassOf(ArrayTypeRef(base, dimensions - 1))
+
+        new TypeData {
+          val typeRef = typeRef0
+
+          val name = genArrayName(arrRef)
+          val isPrimitive = false
+          val isInterface = false
+          val isArrayClass = true
+
+          def isInstance(that: js.Any): Boolean =
+            isInstanceFun(that)
+
+          def isAssignableFrom(that: TypeData): Boolean = {
+            that.typeRef match {
+              case thatTypeRef: ArrayTypeRef =>
+                isSubtype(ArrayType(thatTypeRef), thisArrayType) { (lhs, rhs) =>
+                  getClassInfo(lhs).isSubclass(rhs)
+                }
+              case _ =>
+                false
+            }
+          }
+
+          def checkCast(value: js.Any): Unit = {
+            if (!(value == null || isInstanceFun(value)))
+              throwVMException(ClassCastExceptionClass, s"$value is not an instance of $name")
+          }
+
+          def newArrayOfThisClass(lengths: js.Array[Int]): js.Any =
+            ArrayInstance.createWithDimensions(arrayOfThisTypeRef, lengths.toList)
+
+          def getComponentType(): js.Any = componentType
+        }
     }
-  }
-
-  def genTypeDataObject(typeRef: TypeRef)(implicit pos: Position): js.Object = typeRef match {
-    case ClassRef(className) =>
-      val classInfo = interpreter.getClassInfo(className)
-      typeDataLiteral(classInfo.runtimeClassName, false, classInfo.kind == Interface, false)
-    case arrRef: ArrayTypeRef =>
-      typeDataLiteral(genArrayName(arrRef), false, false, true)
-    case primRef: PrimRef =>
-      typeDataLiteral(primRef.displayName, true, false, false)
   }
 
   private def genArrayName(typeRef: TypeRef): String = typeRef match {
@@ -566,14 +588,6 @@ private[core] final class Executor(val interpreter: Interpreter) {
     case ArrayTypeRef(base, dimensions) =>
       "[" * dimensions + genArrayName(base)
   }
-
-  def typeDataLiteral(name: String, isPrimitive: Boolean, isInterface: Boolean, isArrayClass: Boolean): js.Object =
-    js.Dynamic.literal(
-      name = name,
-      isPrimitive = isPrimitive,
-      isInterface = isInterface,
-      isArrayClass = isArrayClass
-    )
 
   /* Generates JSClass value */
   def initJSClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
@@ -640,6 +654,22 @@ private[core] object Executor {
 
   trait JSVarArgsThisFunction extends js.ThisFunction {
     def apply(thiz: js.Any, args: js.Any*): js.Any
+  }
+
+  trait TypeData extends js.Object {
+    // for internal use
+    val typeRef: TypeRef
+
+    // specified API
+    val name: String
+    val isPrimitive: Boolean
+    val isInterface: Boolean
+    val isArrayClass: Boolean
+    def isInstance(value: js.Any): Boolean
+    def isAssignableFrom(that: TypeData): Boolean
+    def checkCast(value: js.Any): Unit
+    def newArrayOfThisClass(lengths: js.Array[Int]): js.Any
+    def getComponentType(): js.Any
   }
 
   def getJSGlobalRef(name: String): js.Any =
