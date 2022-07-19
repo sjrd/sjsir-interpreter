@@ -996,19 +996,29 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
+    private val getter: js.Function0[js.Any] =
+      new js.Function(s"return $name").asInstanceOf[js.Function0[js.Any]]
+
+    private val setter: js.Function1[js.Any, Unit] =
+      if (name == "value") new js.Function("x", s"$name = x").asInstanceOf[js.Function1[js.Any, Unit]]
+      else new js.Function("value", s"$name = value").asInstanceOf[js.Function1[js.Any, Unit]]
+
     override def eval()(implicit env: Env): js.Any =
-      getJSGlobalRef(name)
+      getter()
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit =
-      setJSGlobalRef(name, value)
+      setter(value)
   }
 
   final class JSTypeOfGlobalRef(name: String)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
+    private val getter: js.Function0[js.Any] =
+      new js.Function(s"return typeof $name").asInstanceOf[js.Function0[js.Any]]
+
     override def eval()(implicit env: Env): js.Any =
-      js.eval(s"typeof $name").asInstanceOf[String]
+      getter()
   }
 
   final class JSLinkingInfo()(
