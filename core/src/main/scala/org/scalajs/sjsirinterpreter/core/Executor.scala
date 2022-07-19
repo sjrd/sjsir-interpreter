@@ -333,45 +333,52 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def evalAsInstanceOf(value: js.Any, tpe: Type)(implicit pos: Position): js.Any = value match {
-    case null => Types.zeroOf(tpe)
-    case x if evalIsInstanceOf(x, tpe) => x
-    case _ => throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()} at $pos")
-  }
+  private val isInstanceOfAlways: Any => Boolean = _ => true
+  private val isInstanceOfString: Any => Boolean = _.isInstanceOf[String]
+  private val isInstanceOfBoolean: Any => Boolean = _.isInstanceOf[Boolean]
+  private val isInstanceOfChar: Any => Boolean = _.isInstanceOf[CharInstance]
+  private val isInstanceOfByte: Any => Boolean = _.isInstanceOf[Byte]
+  private val isInstanceOfShort: Any => Boolean = _.isInstanceOf[Short]
+  private val isInstanceOfInt: Any => Boolean = _.isInstanceOf[Int]
+  private val isInstanceOfLong: Any => Boolean = _.isInstanceOf[LongInstance]
+  private val isInstanceOfFloat: Any => Boolean = _.isInstanceOf[Float]
+  private val isInstanceOfDouble: Any => Boolean = _.isInstanceOf[Double]
+  private val isInstanceOfUndef: Any => Boolean = js.isUndefined(_)
+  private val isInstanceOfNever: Any => Boolean = _ => false
 
-  def evalIsInstanceOf(value: Any, t: Type)(implicit pos: Position): Boolean = {
-    t match {
-      case _ if value == null =>
-        false
+  def getIsInstanceOfFun(tpe: Type)(implicit pos: Position): Any => Boolean = {
+    tpe match {
       case AnyType =>
-        true
+        isInstanceOfAlways
       case StringType =>
-        value.isInstanceOf[String]
+        isInstanceOfString
       case t: PrimTypeWithRef =>
         (t.primRef.charCode: @switch) match {
-          case 'Z' => value.isInstanceOf[Boolean]
-          case 'C' => value.isInstanceOf[CharInstance]
-          case 'B' => value.isInstanceOf[Byte]
-          case 'S' => value.isInstanceOf[Short]
-          case 'I' => value.isInstanceOf[Int]
-          case 'J' => value.isInstanceOf[LongInstance]
-          case 'F' => value.isInstanceOf[Float]
-          case 'D' => value.isInstanceOf[Double]
-          case 'V' | 'N' | 'E' => false
+          case 'Z' => isInstanceOfBoolean
+          case 'C' => isInstanceOfChar
+          case 'B' => isInstanceOfByte
+          case 'S' => isInstanceOfShort
+          case 'I' => isInstanceOfInt
+          case 'J' => isInstanceOfLong
+          case 'F' => isInstanceOfFloat
+          case 'D' => isInstanceOfDouble
+          case 'V' | 'N' | 'E' => isInstanceOfNever
         }
       case ClassType(className) =>
         val classInfo = interpreter.getClassInfo(className)
-        classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))(value)
+        classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))
       case UndefType =>
-        js.isUndefined(value)
+        isInstanceOfUndef
       case t: ArrayType =>
-        value match {
-          case value: ArrayInstance =>
-            isSubtype(ArrayType(value.typeRef), t) { (lhs, rhs) =>
-              interpreter.getClassInfo(lhs).isSubclass(rhs)
-            }
-          case _ =>
-            false
+        { value =>
+          value match {
+            case value: ArrayInstance =>
+              isSubtype(ArrayType(value.typeRef), tpe) { (lhs, rhs) =>
+                interpreter.getClassInfo(lhs).isSubclass(rhs)
+              }
+            case _ =>
+              false
+          }
         }
       case _: RecordType =>
         throw new AssertionError(s"Unexpected RecordType at $pos")
@@ -382,16 +389,16 @@ private[core] final class Executor(val interpreter: Interpreter) {
     classInfo.kind match {
       case HijackedClass =>
         classInfo.className match {
-          case BoxedUnitClass      => (value => value == ())
-          case BoxedBooleanClass   => (value => value.isInstanceOf[Boolean])
-          case BoxedCharacterClass => (value => value.isInstanceOf[CharInstance])
-          case BoxedByteClass      => (value => value.isInstanceOf[Byte])
-          case BoxedShortClass     => (value => value.isInstanceOf[Short])
-          case BoxedIntegerClass   => (value => value.isInstanceOf[Int])
-          case BoxedLongClass      => (value => value.isInstanceOf[LongInstance])
-          case BoxedFloatClass     => (value => value.isInstanceOf[Float])
-          case BoxedDoubleClass    => (value => value.isInstanceOf[Double])
-          case BoxedStringClass    => (value => value.isInstanceOf[String])
+          case BoxedUnitClass      => isInstanceOfUndef
+          case BoxedBooleanClass   => isInstanceOfBoolean
+          case BoxedCharacterClass => isInstanceOfChar
+          case BoxedByteClass      => isInstanceOfByte
+          case BoxedShortClass     => isInstanceOfShort
+          case BoxedIntegerClass   => isInstanceOfInt
+          case BoxedLongClass      => isInstanceOfLong
+          case BoxedFloatClass     => isInstanceOfFloat
+          case BoxedDoubleClass    => isInstanceOfDouble
+          case BoxedStringClass    => isInstanceOfString
 
           case _ =>
             throw new AssertionError(s"Unknown hijacked class $classInfo at $pos")
@@ -473,7 +480,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
           val classInfo = interpreter.getClassInfo(className)
           classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))(obj)
         case typeRef: ArrayTypeRef =>
-          evalIsInstanceOf(obj, ArrayType(typeRef))
+          getIsInstanceOfFun(ArrayType(typeRef))(pos)(obj)
       }
     } : js.Function1[js.Object, js.Any])
 
@@ -489,12 +496,15 @@ private[core] final class Executor(val interpreter: Interpreter) {
           () // OK
         case ClassRef(className) =>
           val classInfo = interpreter.getClassInfo(className)
-          if (classInfo.kind.isJSType)
+          if (classInfo.kind.isJSType || obj == null || getIsInstanceOfFun(ClassType(className))(pos)(obj))
             () // OK
           else
-            evalAsInstanceOf(obj, ClassType(className))
+            throwVMException(ClassCastExceptionClass, s"$obj cannot be cast to ${className.nameString}")
         case typeRef: ArrayTypeRef =>
-          evalAsInstanceOf(obj, ArrayType(typeRef))
+          if (obj == null || getIsInstanceOfFun(ArrayType(typeRef))(pos)(obj))
+            () // OK
+          else
+            throwVMException(ClassCastExceptionClass, s"$obj cannot be cast to ${typeRef.show()}")
         case _: PrimRef =>
           throwVMException(ClassCastExceptionClass, s"cannot cast to primitive type ${typeRef.displayName}")
       }

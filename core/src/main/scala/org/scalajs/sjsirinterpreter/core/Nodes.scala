@@ -666,20 +666,27 @@ private[core] object Nodes {
     }
   }
 
-  final class IsInstanceOf(expr: Node, testType: Type)(
+  final class IsInstanceOf(expr: Node, isInstanceFun: js.Any => Boolean)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      executor.evalIsInstanceOf(expr.eval(), testType)
+      isInstanceFun(expr.eval())
   }
 
-  final class AsInstanceOf(expr: Node, tpe: Type)(
+  final class AsInstanceOf(expr: Node, tpe: Type, isInstanceFun: js.Any => Boolean, nullValue: js.Any)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
-      executor.evalAsInstanceOf(expr.eval(), tpe)
+    override def eval()(implicit env: Env): js.Any = {
+      val value = expr.eval()
+      if (value == null)
+        nullValue
+      else if (isInstanceFun(value))
+        value
+      else
+        executor.throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()}")
+    }
   }
 
   final class GetClass(expr: Node)(

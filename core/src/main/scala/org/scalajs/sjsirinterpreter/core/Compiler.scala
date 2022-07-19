@@ -175,10 +175,10 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.ArraySelect(compile(array), compile(index))
 
       case IsInstanceOf(expr, testType) =>
-        new n.IsInstanceOf(compile(expr), testType)
+        new n.IsInstanceOf(compile(expr), executor.getIsInstanceOfFun(testType))
 
       case AsInstanceOf(expr, tpe) =>
-        new n.AsInstanceOf(compile(expr), tpe)
+        new n.AsInstanceOf(compile(expr), tpe, executor.getIsInstanceOfFun(tpe), Types.zeroOf(tpe))
 
       case GetClass(expr) =>
         new n.GetClass(compile(expr))

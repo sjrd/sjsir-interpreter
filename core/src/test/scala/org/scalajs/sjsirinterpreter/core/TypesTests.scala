@@ -19,54 +19,10 @@ object TypesTests extends TestSuite{
   val tests = Tests {
     val e = new Interpreter(Semantics.Defaults).executor
 
-    test("asInstanceOf") {
-      val variants: Seq[(js.Any, Type, js.Any)] = Seq(
-        (1, FloatType, 1.0),
-        (null, FloatType, 0.0),
-        (null, IntType, 0),
-        (null, BooleanType, false),
-        (Byte.MaxValue, ByteType, Byte.MaxValue),
-        (Short.MaxValue, ShortType, Short.MaxValue),
-        (Float.MaxValue, FloatType, Float.MaxValue)
-      )
-
-      variants.foreach {
-        case (inp, tpe, out) => e.evalAsInstanceOf(inp, tpe) ==> out
-      }
-    }
-
-    test("asInstanceOf for longs") {
-      val variants: Seq[(js.Any, Type, Long)] = Seq(
-        (null, LongType, 0L),
-        (new LongInstance(Long.MaxValue), LongType, Long.MaxValue),
-        (new LongInstance(Long.MinValue), LongType, Long.MinValue),
-      )
-
-      variants.foreach {
-        case (inp, tpe, out) =>
-          e.evalAsInstanceOf(inp, tpe).asInstanceOf[LongInstance].value ==> out
-      }
-    }
-
-    test("disallowed asInstanceOf") {
-      intercept[Throwable] {
-        e.evalAsInstanceOf(1, LongType)
-      }
-      intercept[Throwable] {
-        e.evalAsInstanceOf(Int.MaxValue, ShortType)
-      }
-      intercept[Throwable] {
-        e.evalAsInstanceOf(Short.MaxValue, ByteType)
-      }
-      intercept[Throwable] {
-        e.evalAsInstanceOf(Double.MaxValue, FloatType)
-      }
-    }
-
     test("IsInstanceOf") {
       def assertInstance(value: js.Any, mapping: Map[Type, Boolean]) =
         for ((tpe, assertion) <- mapping) {
-          e.evalIsInstanceOf(value, tpe).asInstanceOf[Boolean] ==> assertion
+          e.getIsInstanceOfFun(tpe)(position)(value) ==> assertion
         }
 
       assertInstance(null, Map(
