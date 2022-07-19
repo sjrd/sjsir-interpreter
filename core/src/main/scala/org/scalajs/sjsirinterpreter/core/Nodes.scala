@@ -83,7 +83,8 @@ private[core] object Nodes {
       val parents = js.Dynamic.literal(ParentClass = superClassValue).asInstanceOf[RawParents]
 
       class Subclass(preSuperEnv: Env) extends parents.ParentClass(toScalaVarArgs(evalSuperArgs(preSuperEnv)): _*) {
-        def this(args: js.Any*) = this(evalBeforeSuper(captureEnv, js.`new`.target, args))
+        def this(newTarget: js.Any, args: Seq[js.Any]) = this(evalBeforeSuper(captureEnv, newTarget, args))
+        def this(args: js.Any*) = this(js.`new`.target, args)
         evalAfterSuper(preSuperEnv, this)
       }
 
