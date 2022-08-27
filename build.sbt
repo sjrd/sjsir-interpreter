@@ -54,13 +54,6 @@ lazy val `sjsir-interpreter-cli` = project
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
     },
-    Compile / fastLinkJS / copyResources := {
-      val stdlib = (`sjsir-interpreter` / scalaJSStdLib).value
-      IO.copy(Seq((stdlib, (LocalRootProject / baseDirectory).value / "std" / stdlib.getName)))
-      val sampleCompile = (sample / Compile / compile).value
-      Nil
-    },
-    Compile / fastLinkJS := (Compile / fastLinkJS).dependsOn(Compile / fastLinkJS / copyResources).value,
   )
 
 lazy val `sjsir-interpreter-browser` = project
@@ -101,7 +94,16 @@ lazy val sample = project
   .settings(
     Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     Test / unmanagedSourceDirectories += baseDirectory.value / "test/src",
-    scalaJSUseMainModuleInitializer := true
+    scalaJSUseMainModuleInitializer := true,
+
+    Compile / jsEnv := {
+      import org.scalajs.jsenv.nodejs.NodeJSEnv
+      val cp = Attributed.data((Compile / fullClasspath).value).mkString(";")
+      val env = Map("SCALAJS_CLASSPATH" -> cp, "SCALAJS_MODE" -> "sample")
+      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
+    },
+
+    Compile / jsEnvInput := (`sjsir-interpreter-cli` / Compile / jsEnvInput).value,
   )
 
 lazy val reversi = project
@@ -195,7 +197,7 @@ lazy val `scalajs-test-suite` = project
     Test / jsEnv := {
       import org.scalajs.jsenv.nodejs.NodeJSEnv
       val cp = Attributed.data((Test / fullClasspath).value).mkString(";")
-      val env = Map("SCALAJS_CLASSPATH" -> cp)
+      val env = Map("SCALAJS_CLASSPATH" -> cp, "SCALAJS_MODE" -> "scalajs-test-suite")
       new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
     },
 

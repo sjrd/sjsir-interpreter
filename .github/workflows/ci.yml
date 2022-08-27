@@ -25,8 +25,8 @@ jobs:
         run: npm install
       - name: Test Core
         run: sbt sjsir-interpreter/test
-      - name: Run CLI
-        run: sbt sjsir-interpreter-cli/run
+      - name: Run the Sample
+        run: sbt sample/run
       - name: Link Browser
         run: sbt sjsir-interpreter-browser/fastOptJS
 

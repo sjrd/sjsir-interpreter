@@ -8,9 +8,9 @@ metals.sbt
 .bsp/
 bsp.log
 /node_modules
-run.log
-/std/
+
 /stage/main.js
 /stage/main.js.map
 /stage/*.jar
+
 /scalajs-test-suite/fetched-sources/

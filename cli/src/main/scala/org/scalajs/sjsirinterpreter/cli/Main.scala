@@ -13,25 +13,34 @@ object Main {
   private implicit val ec: ExecutionContext = ExecutionContext.global
 
   def main(args: Array[String]): Unit = {
+    val modeEnvVar = js.Dynamic.global.process.env.SCALAJS_MODE
+
     val cpEnvVar = js.Dynamic.global.process.env.SCALAJS_CLASSPATH
-    val (classpath, moduleInitializers, semantics) = if (js.isUndefined(cpEnvVar)) {
-      val cp = List(
-        "std/scalajs-library_2.13-1.10.1.jar",
-        "sample/target/scala-2.13/classes",
-      )
-      val initializers = List(
-        ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"),
-      )
-      val semantics = Semantics.Defaults
-      (cp, initializers, semantics)
-    } else {
-      val cp = cpEnvVar.asInstanceOf[String].split(';').toList
-      val initializers0 = List(
-        ModuleInitializer.mainMethod("org.scalajs.testing.bridge.Bridge", "start"),
-      )
-      val initializers = initializers0 ::: TestSuiteLinkerOptions.moduleInitializers
-      val semantics = TestSuiteLinkerOptions.semantics(Semantics.Defaults)
-      (cp, initializers, semantics)
+    val classpath = (cpEnvVar: Any) match {
+      case cpEnvVar: String if cpEnvVar != "" =>
+        cpEnvVar.split(';').toList
+      case _ =>
+        throw new IllegalArgumentException("The classpath was not provided.")
+    }
+
+    val (moduleInitializers, semantics) = (modeEnvVar: Any) match {
+      case "sample" =>
+        val initializers = List(
+          ModuleInitializer.mainMethodWithArgs("sample.HelloWorld", "main"),
+        )
+        val semantics = Semantics.Defaults
+        (initializers, semantics)
+
+      case "scalajs-test-suite" =>
+        val initializers0 = List(
+          ModuleInitializer.mainMethod("org.scalajs.testing.bridge.Bridge", "start"),
+        )
+        val initializers = initializers0 ::: TestSuiteLinkerOptions.moduleInitializers
+        val semantics = TestSuiteLinkerOptions.semantics(Semantics.Defaults)
+        (initializers, semantics)
+
+      case _ =>
+        throw new IllegalArgumentException(s"Invalid mode: $modeEnvVar")
     }
 
     println("Starting the interpreter")
