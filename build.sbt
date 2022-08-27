@@ -10,6 +10,8 @@ inThisBuild(Def.settings(
   ),
 ))
 
+val scalaJSStdLib = taskKey[File]("jar of the scalajs-library")
+
 val fetchScalaJSSource = taskKey[File]("Fetches the source code of Scala.js")
 
 lazy val root = project
@@ -23,12 +25,26 @@ lazy val `sjsir-interpreter` = project
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.10.1",
       "com.lihaoyi" %%% "utest" % "0.7.5" % "test",
+      "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
     testFrameworks += new TestFramework("utest.runner.Framework"),
-    scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
-    }
+    },
+
+    scalaJSStdLib := {
+      val cp = Attributed.data((Compile / dependencyClasspath).value)
+      cp.find(_.getName.startsWith("scalajs-library")).getOrElse {
+        throw new MessageOnlyException(s"Cannot find the scalajs-library in $cp")
+      }
+    },
+
+    Test / jsEnv := {
+      import org.scalajs.jsenv.nodejs.NodeJSEnv
+      val stdlib = scalaJSStdLib.value
+      val env = Map("SCALAJS_LIBRARY_JAR" -> stdlib.getAbsolutePath())
+      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
+    },
   )
 
 lazy val `sjsir-interpreter-cli` = project
@@ -41,10 +57,7 @@ lazy val `sjsir-interpreter-cli` = project
       _.withModuleKind(ModuleKind.CommonJSModule),
     },
     Compile / fastLinkJS / copyResources := {
-      val cp = Attributed.data((Compile / dependencyClasspath).value)
-      val stdlib = cp.find(_.getName.startsWith("scalajs-library")).getOrElse {
-        throw new MessageOnlyException(s"Cannot find the scalajs-library in $cp")
-      }
+      val stdlib = (`sjsir-interpreter` / scalaJSStdLib).value
       IO.copy(Seq((stdlib, (LocalRootProject / baseDirectory).value / "std" / stdlib.getName)))
       val sampleCompile = (sample / Compile / compile).value
       Nil
@@ -67,10 +80,7 @@ lazy val `sjsir-interpreter-browser` = project
     scalacOptions += "-deprecation",
     Compile / fastLinkJS / copyResources := {
       val stageDir = (LocalRootProject / baseDirectory).value / "stage"
-      val cp = Attributed.data((Compile / dependencyClasspath).value)
-      val stdlib = cp.find(_.getName.startsWith("scalajs-library")).getOrElse {
-        throw new MessageOnlyException(s"Cannot find the scalajs-library in $cp")
-      }
+      val stdlib = (`sjsir-interpreter` / scalaJSStdLib).value
       IO.copy(Seq((stdlib, stageDir / stdlib.getName)))
       val sampleCompile = (sample / Compile / compile).value
       IO.copyDirectory((sample / Compile / classDirectory).value, stageDir / "hello")
