@@ -1,6 +1,8 @@
 inThisBuild(Def.settings(
-  scalaVersion := "2.13.8",
+  organization := "be.doeraene",
   version := "0.1.0-SNAPSHOT",
+
+  scalaVersion := "2.13.8",
 
   scalacOptions ++= Seq(
     "-encoding", "utf-8",
