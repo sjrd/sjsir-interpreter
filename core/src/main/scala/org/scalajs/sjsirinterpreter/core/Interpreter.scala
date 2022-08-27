@@ -10,7 +10,7 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 
 import org.scalajs.linker.interface._
-import org.scalajs.linker.interface.unstable.{IRFileImpl, RuntimeClassNameMapperImpl}
+import org.scalajs.linker.interface.unstable.IRFileImpl
 
 final class Interpreter(val semantics: Semantics) {
   private var working: Boolean = false
@@ -89,7 +89,4 @@ final class Interpreter(val semantics: Semantics) {
       stopWorking()
     }
   }
-
-  private[core] def runtimeClassName(classNameString: String): String =
-    RuntimeClassNameMapperImpl.map(semantics.runtimeClassNameMapper, classNameString)
 }

@@ -12,6 +12,8 @@ import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
 
+import org.scalajs.linker.interface.unstable.RuntimeClassNameMapperImpl
+
 private[core] final class ClassInfo(val interpreter: Interpreter,
     val className: ClassName, val classDef: ClassDef) {
 
@@ -352,7 +354,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   // End of public method resolution ------------------------------------------
 
   def runtimeClassName: String =
-    interpreter.runtimeClassName(classNameString)
+    RuntimeClassNameMapperImpl.map(interpreter.semantics.runtimeClassNameMapper, classNameString)
 
   private var compiledJSClassDef: Nodes.JSClassDef = null
   def getCompiledJSClassDef()(implicit pos: Position): Nodes.JSClassDef = {
