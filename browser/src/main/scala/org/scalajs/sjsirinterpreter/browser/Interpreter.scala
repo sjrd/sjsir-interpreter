@@ -10,24 +10,20 @@ import org.scalajs.linker.interface.{ModuleInitializer, Semantics}
 
 import org.scalajs.sjsirinterpreter.core.{Interpreter => CoreInterpreter, _}
 
-@JSExportTopLevel("Interpreter")
-class Interpreter(
-  val irPath: String,
-  val mainClass: String,
-  val mainMethod: String = "main",
-  val stdPath: String = "scalajs-library_2.13-1.10.1.jar"
-) extends js.Object {
+@JSExportTopLevel("ReversiInterpreter")
+class ReversiInterpreter() extends js.Object {
   @scala.annotation.nowarn
   private implicit val ec: ExecutionContext = ExecutionContext.global
 
   def run(): Unit = {
     val semantics = Semantics.Defaults
-    val initializers = List(ModuleInitializer.mainMethodWithArgs(mainClass, mainMethod))
+    val classpath = List("./scalajs-library.jar", "./reversi.jar")
+    val initializers = List(ModuleInitializer.mainMethodWithArgs("reversi.Main", "main"))
 
     println("Starting the interpreter")
     val interpreter = new CoreInterpreter(semantics)
     val result = for {
-      irFiles <- new BrowserReader(stdPath, irPath).irFiles
+      irFiles <- new BrowserReader(classpath).irFiles
       _ <- interpreter.loadIRFiles(irFiles)
       _ <- interpreter.runModuleInitializers(initializers)
     } yield {

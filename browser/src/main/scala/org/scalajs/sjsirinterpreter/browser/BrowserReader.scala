@@ -11,27 +11,12 @@ import org.scalajs.dom.experimental.Fetch
 import scala.scalajs.js.typedarray._
 import org.scalajs.linker.standard.MemIRFileImpl
 
-class BrowserReader(val stdPath: String, val irPath: String) {
+class BrowserReader(val classpath: List[String]) {
 
-  def irFiles(implicit ec: ExecutionContext): Future[Seq[IRFile]] = {
-    loadStd(stdPath).flatMap { std =>
-      loadIrFiles.map(_ ++ std)
-    }
-  }
+  def irFiles(implicit ec: ExecutionContext): Future[Seq[IRFile]] =
+    Future.sequence(classpath.map(loadJar(_))).map(_.flatten)
 
-  private def loadIrFiles(implicit ec: ExecutionContext): Future[List[IRFile]] = {
-    Fetch.fetch(s"$irPath/list.txt")
-      .toFuture.flatMap(_.text().toFuture).map(_.split("\n").map(irPath + "/" + _))
-      .flatMap { files =>
-        Future.traverse(files.toList) { file =>
-          loadFile(file).map { buf =>
-            new MemIRFileImpl(file, None, new Int8Array(buf).toArray)
-          }
-        }
-      }
-  }
-
-  private def loadStd(path: String)(implicit ec: ExecutionContext): Future[List[IRFile]] = {
+  private def loadJar(path: String)(implicit ec: ExecutionContext): Future[List[IRFile]] = {
     for {
       arr <- loadFile(path).map(new Uint8Array(_))
       zip <- JSZip.loadAsync(arr).toFuture

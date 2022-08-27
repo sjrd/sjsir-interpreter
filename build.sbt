@@ -76,21 +76,21 @@ lazy val `sjsir-interpreter-browser` = project
       _.withModuleKind(ModuleKind.ESModule),
     },
     scalacOptions += "-deprecation",
+
     Compile / fastLinkJS / copyResources := {
       val stageDir = (LocalRootProject / baseDirectory).value / "stage"
+
+      // Copy the scalajs-library.jar
       val stdlib = (`sjsir-interpreter` / scalaJSStdLib).value
-      IO.copy(Seq((stdlib, stageDir / stdlib.getName)))
-      val sampleCompile = (sample / Compile / compile).value
-      IO.copyDirectory((sample / Compile / classDirectory).value, stageDir / "hello")
-      val reversiCompile = (reversi / Compile / compile).value
-      val reversiDir = stageDir / "reversi"
-      IO.copyDirectory((reversi / Compile / classDirectory).value, stageDir / "reversi")
-      val files = (reversiDir ** "*.sjsir").get
-        .map(_.relativeTo(reversiDir).get.toString)
-        .sorted
-      IO.writeLines(reversiDir / "list.txt", files)
+      IO.copyFile(stdlib, stageDir / "scalajs-library.jar")
+
+      // Copy the reversi.jar
+      val reversiJar = (reversi / Compile / packageBin).value
+      IO.copyFile(reversiJar, stageDir / "reversi.jar")
+
       Nil
     },
+
     Compile / fastLinkJS := (Compile / fastLinkJS).dependsOn(Compile / fastLinkJS / copyResources).value,
     Compile / fastOptJS / artifactPath := baseDirectory.value / "../stage/main.js"
   )

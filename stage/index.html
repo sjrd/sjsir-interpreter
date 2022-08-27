@@ -12,13 +12,8 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.5.0/jszip.js"></script>
 
     <script type="module">
-      import { Interpreter } from './main.js';
-      var interpreter = new Interpreter(
-        // "hello",
-        // "sample.Sample"
-        "reversi",
-        "reversi.Main"
-      );
+      import { ReversiInterpreter } from './main.js';
+      var interpreter = new ReversiInterpreter();
       interpreter.run();
     </script>
   </body>
