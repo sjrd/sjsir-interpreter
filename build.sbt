@@ -1,6 +1,9 @@
 inThisBuild(Def.settings(
   organization := "be.doeraene",
-  version := "0.1.0-SNAPSHOT",
+  homepage := Some(url("https://github.com/sjrd/sjsir-interpreter")),
+  licenses += (("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0"))),
+  developers += Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd")),
+  versionScheme := Some("early-semver"),
 
   scalaVersion := "2.13.8",
 
@@ -18,6 +21,10 @@ val fetchScalaJSSource = taskKey[File]("Fetches the source code of Scala.js")
 
 lazy val root = project
   .in(file("."))
+  .aggregate(`sjsir-interpreter`)
+  .settings(
+    publish / skip := true,
+  )
 
 lazy val `sjsir-interpreter` = project
   .in(file("core"))
@@ -52,6 +59,7 @@ lazy val `sjsir-interpreter-cli` = project
   .in(file("cli"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
+    publish / skip := true,
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
@@ -63,6 +71,7 @@ lazy val `sjsir-interpreter-browser` = project
   .in(file("browser"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
+    publish / skip := true,
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "1.1.0"
     ),
@@ -94,6 +103,7 @@ lazy val sample = project
   .in(file("sample"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
+    publish / skip := true,
     Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     Test / unmanagedSourceDirectories += baseDirectory.value / "test/src",
     scalaJSUseMainModuleInitializer := true,
@@ -112,6 +122,7 @@ lazy val reversi = project
   .in(file("reversi"))
   .enablePlugins(ScalaJSPlugin)
   .settings(
+    publish / skip := true,
     Compile / unmanagedSourceDirectories += baseDirectory.value / "src",
     scalaJSUseMainModuleInitializer := true
   )
@@ -120,6 +131,8 @@ lazy val `scalajs-test-suite` = project
   .in(file("scalajs-test-suite"))
   .enablePlugins(ScalaJSPlugin, ScalaJSJUnitPlugin)
   .settings(
+    publish / skip := true,
+
     fetchScalaJSSource / artifactPath :=
       baseDirectory.value / "fetched-sources" / scalaJSVersion,
 
