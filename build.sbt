@@ -24,10 +24,8 @@ lazy val `sjsir-interpreter` = project
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-linker" % "1.10.1",
-      "com.lihaoyi" %%% "utest" % "0.7.5" % "test",
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
-    testFrameworks += new TestFramework("utest.runner.Framework"),
     scalaJSLinkerConfig ~= {
       _.withModuleKind(ModuleKind.CommonJSModule),
     },
