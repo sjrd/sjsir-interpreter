@@ -15,7 +15,7 @@ The Scala.js IR Interpreter comes as a Scala.js library exposing a very small su
 Depend on it with
 
 ```scala
-libraryDependencies += "be.doeraene" %%% "sjsir-interpreter" % "0.1.0"
+libraryDependencies += "be.doeraene" %%% "sjsir-interpreter" % "0.2.0"
 ```
 
 Then use an instance of `org.scalajs.sjsirinterpreter.core.Interpreter`.
