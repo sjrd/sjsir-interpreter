@@ -134,6 +134,22 @@ private[core] final class Executor(val interpreter: Interpreter) {
     _jlClassCtorInfo
   }
 
+  private var _jsExceptionClassInfo: ClassInfo = null
+  def jsExceptionClassInfo(implicit pos: Position): ClassInfo = {
+    if (_jsExceptionClassInfo == null)
+      _jsExceptionClassInfo = getClassInfo(JavaScriptExceptionClass)
+    _jsExceptionClassInfo
+  }
+
+  private var _jsExceptionCtorInfo: MethodInfo = null
+  def jsExceptionCtorInfo(implicit pos: Position): MethodInfo = {
+    if (_jsExceptionCtorInfo == null) {
+      _jsExceptionCtorInfo =
+        jsExceptionClassInfo.lookupMethod(MemberNamespace.Constructor, anyArgCtor)
+    }
+    _jsExceptionCtorInfo
+  }
+
   def runStaticInitializers(classInfos: List[ClassInfo]): Unit = {
     for (classInfo <- classInfos) {
       for (methodInfo <- classInfo.maybeLookupStaticConstructor(StaticInitializerName)) {
@@ -642,12 +658,14 @@ private[core] final class Executor(val interpreter: Interpreter) {
 }
 
 private[core] object Executor {
-  val ThrowableClass = ClassName("java.lang.Throwable")
+  val JavaScriptExceptionClass = ClassName("scala.scalajs.js.JavaScriptException")
   val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
   val StackTraceElementClass = ClassName("java.lang.StackTraceElement")
 
   val BoxedStringRef = ClassRef(BoxedStringClass)
   val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
+
+  val exceptionFieldName = FieldName("exception")
 
   val anyArgCtor = MethodName.constructor(List(ClassRef(ObjectClass)))
   val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))

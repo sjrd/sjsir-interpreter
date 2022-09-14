@@ -19,7 +19,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   val classNameString: String = className.nameString
   val kind = classDef.kind
-  val isTheThrowableClass = className == Executor.ThrowableClass
+  val isTheThrowableClass = className == ThrowableClass
 
   val typeRef: ClassRef = ClassRef(className)
 
@@ -74,7 +74,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     ancestorsForSubclassLookup.contains(that)
 
   def isThrowableClass(implicit pos: Position): Boolean =
-    ancestorsForSubclassLookup.contains(Executor.ThrowableClass)
+    ancestorsForSubclassLookup.contains(ThrowableClass)
 
   /** Runs the given callback for each of the ancestor classes of this
    *  ClassInfo, from top (`j.l.Object`) to bottom (this ClassInfo).
@@ -393,16 +393,10 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   private var compiledJSMethodPropDefs: List[Nodes.JSMethodOrPropertyDef] = null
   def getCompiledJSMethodPropDefs()(implicit pos: Position): List[Nodes.JSMethodOrPropertyDef] = {
-    def isJSConstructorDef(methodDef: JSMethodDef): Boolean = {
-      kind.isJSClass && (methodDef.name match {
-        case StringLiteral("constructor") => true
-        case _                            => false
-      })
-    }
     if (compiledJSMethodPropDefs == null) {
       val compiler = interpreter.compiler
       compiledJSMethodPropDefs = classDef.memberDefs.collect {
-        case methodDef: JSMethodDef if !methodDef.flags.namespace.isStatic && !isJSConstructorDef(methodDef) =>
+        case methodDef: JSMethodDef if !methodDef.flags.namespace.isStatic =>
           compiler.compileJSMethodDef(this, methodDef)
         case propertyDef: JSPropertyDef if !propertyDef.flags.namespace.isStatic =>
           compiler.compileJSPropertyDef(this, propertyDef)
