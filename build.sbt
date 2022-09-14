@@ -32,7 +32,7 @@ lazy val `sjsir-interpreter` = project
   .settings(
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.10.1",
+      "org.scala-js" %%% "scalajs-linker" % "1.11.0",
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
     scalaJSLinkerConfig ~= {
@@ -227,4 +227,13 @@ lazy val `scalajs-test-suite` = project
     },
 
     Test / testOptions += Tests.Argument(TestFrameworks.JUnit, "-a", "-s", "-v"),
+
+    /* Ignore the StackTraceTest. While we can produce very good stack traces
+     * for IR-defined `Throwable`s, we have no control on JS `Error`s. They
+     * capture the stack trace of the interpreter, rather than the interpreted
+     * program.
+     */
+    Test / testOptions += Tests.Filter({ testName =>
+      testName != "org.scalajs.testsuite.library.StackTraceTest"
+    }),
   )

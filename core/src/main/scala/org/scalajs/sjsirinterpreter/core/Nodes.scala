@@ -278,15 +278,11 @@ private[core] object Nodes {
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
-      try {
+      js.special.tryCatch { () =>
         block.eval()
-      } catch {
-        case js.JavaScriptException(e) =>
-          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
-          handler.eval()
-        case e: Throwable =>
-          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
-          handler.eval()
+      } { e =>
+        env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
+        handler.eval()
       }
     }
   }
@@ -309,7 +305,7 @@ private[core] object Nodes {
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      throw js.JavaScriptException(expr.eval())
+      js.special.`throw`(expr.eval())
   }
 
   final class Match(selector: Node, cases: Map[js.Any, Node], default: Node)(
@@ -498,6 +494,7 @@ private[core] object Nodes {
       @inline def longValue: Long = value.asInstanceOf[LongInstance].value
       @inline def floatValue: Float = value.asInstanceOf[Float]
       @inline def doubleValue: Double = value.asInstanceOf[Double]
+      @inline def stringValue: String = value.asInstanceOf[String]
 
       (op: @switch) match {
         case Boolean_!     => !booleanValue
@@ -512,6 +509,7 @@ private[core] object Nodes {
         case LongToDouble  => longValue.toDouble
         case DoubleToLong  => new LongInstance(doubleValue.toLong)
         case LongToFloat   => longValue.toFloat
+        case String_length => stringValue.length
 
         case ByteToInt | ShortToInt | IntToDouble | FloatToDouble =>
           value
@@ -534,6 +532,7 @@ private[core] object Nodes {
       @inline def longLHSValue: Long = lhsValue.asInstanceOf[LongInstance].value
       @inline def floatLHSValue: Float = lhsValue.asInstanceOf[Float]
       @inline def doubleLHSValue: Double = lhsValue.asInstanceOf[Double]
+      @inline def stringLHSValue: String = lhsValue.asInstanceOf[String]
 
       @inline def booleanRHSValue: Boolean = rhsValue.asInstanceOf[Boolean]
       @inline def intRHSValue: Int = rhsValue.asInstanceOf[Int]
@@ -622,6 +621,8 @@ private[core] object Nodes {
         case Double_<= => doubleLHSValue <= doubleRHSValue
         case Double_>  => doubleLHSValue > doubleRHSValue
         case Double_>= => doubleLHSValue >= doubleRHSValue
+
+        case String_charAt => new CharInstance(stringLHSValue.charAt(intRHSValue))
       }
     }
   }
@@ -740,6 +741,44 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any =
       System.identityHashCode(expr.eval())
+  }
+
+  final class WrapAsThrowable(expr: Node)(
+      implicit executor: Executor, pos: Position)
+      extends Node {
+
+    override def eval()(implicit env: Env): js.Any = {
+      val value = expr.eval()
+      value match {
+        case Instance(instance) if instance.classInfo.isSubclass(ThrowableClass) =>
+          value
+        case rest =>
+          executor.newInstanceWithConstructor(executor.jsExceptionCtorInfo, value :: Nil)
+      }
+    }
+  }
+
+  final class UnwrapFromThrowable(expr: Node)(
+      implicit executor: Executor, pos: Position)
+      extends Node {
+
+    private val fieldIndex =
+      executor.jsExceptionClassInfo.fieldDefIndices.apply(Executor.exceptionFieldName)
+
+    override def eval()(implicit env: Env): js.Any = {
+      expr.eval() match {
+        case Instance(instance) =>
+          if (instance.classInfo.isSubclass(JavaScriptExceptionClass))
+            instance.fields(fieldIndex)
+          else
+            instance
+        case null =>
+          executor.throwVMException(NullPointerExceptionClass,
+              s"unwrapFromThrowable(null)")
+        case rest =>
+          throw new AssertionError(s"Unexpected value $rest in Select node at $pos")
+      }
+    }
   }
 
   // JavaScript expressions

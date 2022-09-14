@@ -189,6 +189,12 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case IdentityHashCode(expr) =>
         new n.IdentityHashCode(compile(expr))
 
+      case WrapAsThrowable(expr) =>
+        new n.WrapAsThrowable(compile(expr))
+
+      case UnwrapFromThrowable(expr) =>
+        new n.UnwrapFromThrowable(compile(expr))
+
       // JavaScript expressions
 
       case JSNew(ctor, args) =>
@@ -330,20 +336,16 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
 
     val constructorBody = {
-      val ctorDef = classDef.memberDefs.find {
-        case JSMethodDef(_, StringLiteral("constructor"), _, _, _) => true
-        case _                                                     => false
-      }.getOrElse {
+      val ctorDef = classDef.memberDefs.find(_.isInstanceOf[JSConstructorDef]).getOrElse {
         throw new AssertionError(s"Cannot find JS constructor in $classInfo at $pos")
-      }.asInstanceOf[JSMethodDef]
+      }.asInstanceOf[JSConstructorDef]
 
-      val (beforeSuperConstructorTrees, superConstructorArgTrees, afterSuperConstructorTrees) =
-        splitJSConstructor(ctorDef.body)
+      val body = ctorDef.body
 
       val ctorEnvBuilder = new EnvBuilder(classCaptures).addParams(ctorDef.args).addRestParam(ctorDef.restParam)
-      val beforeSuperConstructor = compileList(beforeSuperConstructorTrees)(ctorEnvBuilder)
-      val superConstructorArgs = compileExprOrJSSpreads(superConstructorArgTrees)(ctorEnvBuilder)
-      val afterSuperConstructor = compileList(afterSuperConstructorTrees)(ctorEnvBuilder)
+      val beforeSuperConstructor = compileList(body.beforeSuper)(ctorEnvBuilder)
+      val superConstructorArgs = compileExprOrJSSpreads(body.superCall.args)(ctorEnvBuilder)
+      val afterSuperConstructor = compileList(body.afterSuper)(ctorEnvBuilder)
 
       new n.JSConstructorBody(
         classInfo,
