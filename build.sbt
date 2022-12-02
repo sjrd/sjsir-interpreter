@@ -1,3 +1,5 @@
+import org.scalajs.linker.interface.ESVersion
+
 inThisBuild(Def.settings(
   organization := "be.doeraene",
   homepage := Some(url("https://github.com/sjrd/sjsir-interpreter")),
@@ -5,7 +7,7 @@ inThisBuild(Def.settings(
   developers += Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd")),
   versionScheme := Some("early-semver"),
 
-  scalaVersion := "2.13.8",
+  scalaVersion := "2.13.10",
 
   scalacOptions ++= Seq(
     "-encoding", "utf-8",
@@ -13,6 +15,8 @@ inThisBuild(Def.settings(
     "-feature",
     "-Xfatal-warnings",
   ),
+
+  scalaJSLinkerConfig ~= { _.withESFeatures(_.withESVersion(ESVersion.ES2016)) },
 ))
 
 val scalaJSStdLib = taskKey[File]("jar of the scalajs-library")
@@ -32,7 +36,7 @@ lazy val `sjsir-interpreter` = project
   .settings(
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.11.0",
+      "org.scala-js" %%% "scalajs-linker" % "1.12.0",
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
     scalaJSLinkerConfig ~= {
@@ -192,6 +196,7 @@ lazy val `scalajs-test-suite` = project
       Seq(
         base / "test-suite/shared/src/test/scala",
         base / "test-suite/js/src/test/require-2.12",
+        base / "test-suite/js/src/test/require-exponent-op",
         base / "test-suite/js/src/test/require-new-target",
         base / "test-suite/js/src/test/require-no-modules",
         base / "test-suite/js/src/test/require-sam",

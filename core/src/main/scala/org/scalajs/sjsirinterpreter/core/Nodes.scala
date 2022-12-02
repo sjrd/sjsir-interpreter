@@ -1008,6 +1008,8 @@ private[core] object Nodes {
 
         case `in`         => js.special.in(lhsValue, rhsValue)
         case `instanceof` => js.special.instanceof(lhsValue, rhsValue)
+
+        case ** => lhsValue ** rhsValue
       }
     }
   }
