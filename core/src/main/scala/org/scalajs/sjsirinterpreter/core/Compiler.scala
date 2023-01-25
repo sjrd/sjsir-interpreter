@@ -79,9 +79,6 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case While(cond, body) =>
         new n.While(compile(cond), compile(body))
 
-      case DoWhile(body, cond) =>
-        new n.DoWhile(compile(body), compile(cond))
-
       case ForIn(obj, keyVar, keyVarOriginalName, body) =>
         val keyVarIndex = envBuilder.declareLocalVar(keyVar.name)
         new n.ForIn(compile(obj), keyVarIndex, compile(body))
@@ -336,7 +333,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
 
     val constructorBody = {
-      val ctorDef = classDef.memberDefs.find(_.isInstanceOf[JSConstructorDef]).getOrElse {
+      val ctorDef = classDef.jsConstructor.getOrElse {
         throw new AssertionError(s"Cannot find JS constructor in $classInfo at $pos")
       }.asInstanceOf[JSConstructorDef]
 

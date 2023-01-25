@@ -250,17 +250,6 @@ private[core] object Nodes {
     }
   }
 
-  final class DoWhile(body: Node, cond: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any = {
-      do {
-        body.eval()
-      } while (Types.asBoolean(cond.eval()))
-    }
-  }
-
   final class ForIn(obj: Node, keyVarIndex: Int, body: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {

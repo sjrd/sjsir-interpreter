@@ -10,6 +10,7 @@ import org.scalajs.ir.OriginalName
 import org.scalajs.ir.OriginalName.NoOriginalName
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
+import org.scalajs.ir.Version
 
 import org.scalajs.linker.interface.ModuleInitializer
 
@@ -24,6 +25,7 @@ object TestIRBuilder {
   val EMF = MemberFlags.empty
   val EOH = OptimizerHints.empty
   val NON = NoOriginalName
+  val NOV = Version.Unversioned
 
   val JSCtorFlags = EMF.withNamespace(MemberNamespace.Public)
 
@@ -45,13 +47,18 @@ object TestIRBuilder {
     interfaces: List[ClassName] = Nil,
     jsSuperClass: Option[Tree] = None,
     jsNativeLoadSpec: Option[JSNativeLoadSpec] = None,
-    memberDefs: List[MemberDef] = Nil,
+    fields: List[AnyFieldDef] = Nil,
+    methods: List[MethodDef] = Nil,
+    jsConstructor: Option[JSConstructorDef] = None,
+    jsMethodProps: List[JSMethodPropDef] = Nil,
+    jsNativeMembers: List[JSNativeMemberDef] = Nil,
     topLevelExportDefs: List[TopLevelExportDef] = Nil,
     optimizerHints: OptimizerHints = EOH
   ): ClassDef = {
     val notHashed = ClassDef(ClassIdent(className), NON, kind, jsClassCaptures,
         superClass.map(ClassIdent(_)), interfaces.map(ClassIdent(_)),
-        jsSuperClass, jsNativeLoadSpec, memberDefs, topLevelExportDefs)(
+        jsSuperClass, jsNativeLoadSpec, fields, methods, jsConstructor,
+        jsMethodProps, jsNativeMembers, topLevelExportDefs)(
         optimizerHints)
     Hashers.hashClassDef(notHashed)
   }
@@ -65,7 +72,7 @@ object TestIRBuilder {
         MainTestClassName,
         kind = ClassKind.ModuleClass,
         superClass = Some(ObjectClass),
-        memberDefs = List(
+        methods = List(
             trivialCtor(MainTestClassName),
             mainMethodDef(mainBody)
         )
@@ -79,14 +86,14 @@ object TestIRBuilder {
             This()(ClassType(enclosingClassName)),
             ObjectClass, MethodIdent(NoArgConstructorName),
             Nil)(NoType)))(
-        EOH, None)
+        EOH, NOV)
   }
 
 
   def trivialJSCtor: JSMethodDef = {
     JSMethodDef(JSCtorFlags, str("constructor"), Nil, None,
         Block(JSSuperConstructorCall(Nil) :: Undefined() :: Nil))(
-        EOH, None)
+        EOH, NOV)
   }
 
   val MainMethodName: MethodName = m("main", List(AT), VoidRef)
@@ -95,7 +102,7 @@ object TestIRBuilder {
     val argsParamDef = paramDef("args", ArrayType(AT))
     MethodDef(MemberFlags.empty.withNamespace(MemberNamespace.PublicStatic),
         MainMethodName, NON, List(argsParamDef), NoType, Some(body))(
-        EOH, None)
+        EOH, NOV)
   }
 
   def consoleLog(expr: Tree): Tree =
