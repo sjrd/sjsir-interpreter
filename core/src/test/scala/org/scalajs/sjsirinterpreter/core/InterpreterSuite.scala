@@ -51,7 +51,7 @@ class InterpreterSuite extends munit.FunSuite {
 
     val step1ClassDefs = List(
       classDef(A,
-        memberDefs = List(
+        methods = List(
           trivialCtor(A),
           mainMethodDef(storeResult("stepwiseExecution", str("step 1"))),
         )
@@ -60,7 +60,7 @@ class InterpreterSuite extends munit.FunSuite {
 
     val step2ClassDefs = List(
       classDef("B",
-        memberDefs = List(
+        methods = List(
           trivialCtor(B),
           mainMethodDef(storeResult("stepwiseExecution", str("step 2"))),
         )

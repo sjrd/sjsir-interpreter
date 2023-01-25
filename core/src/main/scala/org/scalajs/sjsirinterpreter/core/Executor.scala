@@ -659,7 +659,6 @@ private[core] final class Executor(val interpreter: Interpreter) {
 
 private[core] object Executor {
   val JavaScriptExceptionClass = ClassName("scala.scalajs.js.JavaScriptException")
-  val NullPointerExceptionClass = ClassName("java.lang.NullPointerException")
   val StackTraceElementClass = ClassName("java.lang.StackTraceElement")
 
   val BoxedStringRef = ClassRef(BoxedStringClass)

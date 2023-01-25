@@ -28,10 +28,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   override def toString(): String = classNameString
 
   private var staticInitializerRun: Boolean = {
-    val hasStaticInit = classDef.memberDefs.exists {
-      case MethodDef(_, methodIdent, _, _, _, _) => methodIdent.name.isStaticInitializer
-      case _                                     => false
-    }
+    val hasStaticInit = classDef.methods.exists(_.methodName.isStaticInitializer)
     !hasStaticInit
   }
 
@@ -88,7 +85,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def staticFields: mutable.Map[FieldName, js.Any] = {
     if (_staticFields == null) {
       _staticFields = mutable.Map.empty
-      classDef.memberDefs.foreach {
+      classDef.fields.foreach {
         case f @ FieldDef(flags, FieldIdent(fieldName), _, tpe) if flags.namespace.isStatic =>
           _staticFields(fieldName) = Types.zeroOf(tpe)
         case _ =>
@@ -103,7 +100,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   private var _instanceFieldDefs: List[FieldDef] = null
   def instanceFieldDefs: List[FieldDef] = {
     if (_instanceFieldDefs == null) {
-      _instanceFieldDefs = classDef.memberDefs.collect {
+      _instanceFieldDefs = classDef.fields.collect {
         case f: FieldDef if !f.flags.namespace.isStatic => f
       }
     }
@@ -152,7 +149,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   private def directMethods(namespace: MemberNamespace): collection.Map[MethodName, MethodInfo] = {
     if (_directMethods == null) {
       _directMethods = Array.fill(MemberNamespace.Count)(mutable.Map.empty)
-      classDef.memberDefs.foreach {
+      classDef.methods.foreach {
         case m @ MethodDef(flags, MethodIdent(methodName), _, _, _, Some(_)) =>
           _directMethods(flags.namespace.ordinal)(methodName) = new MethodInfo(this, methodName, m)
         case _ =>
@@ -367,14 +364,17 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def getCompiledStaticJSMemberDefs()(implicit pos: Position): List[Nodes.JSMemberDef] = {
     if (compiledStaticJSMemberDefs == null) {
       val compiler = interpreter.compiler
-      compiledStaticJSMemberDefs = classDef.memberDefs.collect {
+      val compiledStaticJSFieldDefs = classDef.fields.collect {
         case fieldDef: JSFieldDef if fieldDef.flags.namespace.isStatic =>
           compiler.compileJSFieldDef(this, fieldDef)
+      }
+      val compiledStaticJSMethodPropDefs = classDef.jsMethodProps.collect {
         case methodDef: JSMethodDef if methodDef.flags.namespace.isStatic =>
           compiler.compileJSMethodDef(this, methodDef)
         case propertyDef: JSPropertyDef if propertyDef.flags.namespace.isStatic =>
           compiler.compileJSPropertyDef(this, propertyDef)
       }
+      compiledStaticJSMemberDefs = compiledStaticJSFieldDefs ::: compiledStaticJSMethodPropDefs
     }
     compiledStaticJSMemberDefs
   }
@@ -383,7 +383,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def getCompiledJSFieldDefs()(implicit pos: Position): List[Nodes.JSFieldDef] = {
     if (compiledJSFieldDefs == null) {
       val compiler = interpreter.compiler
-      compiledJSFieldDefs = classDef.memberDefs.collect {
+      compiledJSFieldDefs = classDef.fields.collect {
         case fieldDef: JSFieldDef if !fieldDef.flags.namespace.isStatic =>
           compiler.compileJSFieldDef(this, fieldDef)
       }
@@ -395,7 +395,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def getCompiledJSMethodPropDefs()(implicit pos: Position): List[Nodes.JSMethodOrPropertyDef] = {
     if (compiledJSMethodPropDefs == null) {
       val compiler = interpreter.compiler
-      compiledJSMethodPropDefs = classDef.memberDefs.collect {
+      compiledJSMethodPropDefs = classDef.jsMethodProps.collect {
         case methodDef: JSMethodDef if !methodDef.flags.namespace.isStatic =>
           compiler.compileJSMethodDef(this, methodDef)
         case propertyDef: JSPropertyDef if !propertyDef.flags.namespace.isStatic =>
@@ -449,9 +449,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   }
 
   def lookupJSNativeMember(methodName: MethodName)(implicit pos: Position): JSNativeMemberDef = {
-    classDef.memberDefs.collectFirst {
-      case m @ JSNativeMemberDef(_, MethodIdent(`methodName`), _) => m
-    }.getOrElse {
+    classDef.jsNativeMembers.find(_.name.name == methodName).getOrElse {
       throw new AssertionError(s"Unknown JS native member ${methodName.nameString} in $classNameString at $pos")
     }
   }

@@ -2,7 +2,7 @@ package org.scalajs.sjsirinterpreter.core
 
 import scala.concurrent._
 
-import org.scalajs.ir.EntryPointsInfo
+import org.scalajs.ir.{EntryPointsInfo, Version}
 import org.scalajs.ir.Trees.ClassDef
 
 import org.scalajs.linker.interface.IRFile
@@ -13,7 +13,7 @@ import org.scalajs.linker.interface.unstable.IRFileImpl
  *  Adapted from Scala.js upstream.
  */
 private final class MemClassDefIRFile(classDef: ClassDef)
-    extends IRFileImpl("mem://" + classDef.name.name + ".sjsir", None) {
+    extends IRFileImpl("mem://" + classDef.name.name + ".sjsir", Version.Unversioned) {
 
   def tree(implicit ec: ExecutionContext): Future[ClassDef] =
     Future(classDef)

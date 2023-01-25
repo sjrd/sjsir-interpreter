@@ -10,6 +10,7 @@ import org.scalajs.linker.interface.IRFile
 import org.scalajs.dom.experimental.Fetch
 import scala.scalajs.js.typedarray._
 import org.scalajs.linker.standard.MemIRFileImpl
+import org.scalajs.ir.Version
 
 class BrowserReader(val classpath: List[String]) {
 
@@ -39,7 +40,7 @@ class BrowserReader(val classpath: List[String]) {
 
     Future.traverse(entries) { entry =>
       entry.async(JSZipInterop.arrayBuffer).toFuture.map { buf =>
-        new MemIRFileImpl(s"$path:${entry.name}", None, new Int8Array(buf).toArray)
+        new MemIRFileImpl(s"$path:${entry.name}", Version.Unversioned, new Int8Array(buf).toArray)
       }
     }.map(_.toList)
   }
