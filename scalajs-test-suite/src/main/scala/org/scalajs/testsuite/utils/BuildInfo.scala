@@ -6,7 +6,8 @@ private[utils] object BuildInfo {
   final val isNoModule = true
   final val isESModule = false
   final val isCommonJSModule = false
-  final val isFullOpt = false
+  final val usesClosureCompiler = false
+  final val hasMinifiedNames = false
   final val compliantAsInstanceOfs = false
   final val compliantArrayIndexOutOfBounds = false
   final val compliantArrayStores = false
