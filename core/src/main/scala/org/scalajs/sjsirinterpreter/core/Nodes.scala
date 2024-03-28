@@ -19,7 +19,7 @@ import org.scalajs.sjsirinterpreter.core.values._
 import Executor._
 
 private[core] object Nodes {
-  private type JSClassPrivateFields = mutable.Map[(ClassName, FieldName), js.Any]
+  private type JSClassPrivateFields = mutable.Map[FieldName, js.Any]
 
   final class Body(localCount: Int, tree: Node) {
     def eval(receiver: Option[js.Any], args: List[js.Any]): js.Any = {
@@ -149,7 +149,7 @@ private[core] object Nodes {
 
         classInfo.instanceFieldDefs.foreach {
           case Trees.FieldDef(flags, Trees.FieldIdent(fieldName), originalName, tpe) =>
-            fields.update((classInfo.className, fieldName), Types.zeroOf(tpe))
+            fields.update(fieldName, Types.zeroOf(tpe))
         }
       }
 
@@ -336,13 +336,12 @@ private[core] object Nodes {
       executor.loadModule(classInfo)
   }
 
-  final class StoreModule(classInfo: ClassInfo, value: Node)(
+  final class StoreModule(classInfo: ClassInfo)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
-      val instance = value.eval()
-      classInfo.storeModuleClassInstance(instance)
+      classInfo.storeModuleClassInstance(env.getThis)
     }
   }
 
@@ -785,25 +784,23 @@ private[core] object Nodes {
     }
   }
 
-  final class JSPrivateSelect(qualifier: Node, className: ClassName, field: FieldName)(
+  final class JSPrivateSelect(qualifier: Node, field: FieldName)(
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
-
-    private val fieldKey = (className, field)
 
     override def eval()(implicit env: Env): js.Any = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
-      fields.getOrElse(fieldKey, {
+      fields.getOrElse(field, {
         throw js.JavaScriptException(
-            new js.TypeError(s"Cannot find field ${className.nameString}::${field.nameString}"))
+            new js.TypeError(s"Cannot find field ${field.nameString}"))
       })
     }
 
     override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
-      fields(fieldKey) = value
+      fields(field) = value
     }
   }
 

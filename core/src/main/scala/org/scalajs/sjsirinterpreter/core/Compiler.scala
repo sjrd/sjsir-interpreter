@@ -18,15 +18,18 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
   import interpreter.getClassInfo
 
-  def compileBody(params: List[ParamDef], body: Tree): Nodes.Body = {
-    val envBuilder = new EnvBuilder(Nil).addParams(params)
+  def compileBody(enclosingClassInfo: Option[ClassInfo], params: List[ParamDef],
+      body: Tree): Nodes.Body = {
+    val envBuilder = new EnvBuilder(enclosingClassInfo, Nil).addParams(params)
     val compiledBody = compile(body)(envBuilder)
     new n.Body(envBuilder.nextLocalIndex, compiledBody)
   }
 
-  def compileJSBody(captureParams: List[ParamDef], params: List[ParamDef],
-      restParam: Option[ParamDef], body: Tree): Nodes.JSBody = {
-    val envBuilder = new EnvBuilder(captureParams).addParams(params).addRestParam(restParam)
+  def compileJSBody(enclosingClassInfo: Option[ClassInfo], captureParams: List[ParamDef],
+      params: List[ParamDef], restParam: Option[ParamDef], body: Tree): Nodes.JSBody = {
+    val envBuilder = new EnvBuilder(enclosingClassInfo, captureParams)
+      .addParams(params)
+      .addRestParam(restParam)
     val compiledBody = compile(body)(envBuilder)
     new n.JSBody(envBuilder.nextLocalIndex, params.size, restParam.isDefined, compiledBody)
   }
@@ -125,15 +128,15 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case LoadModule(className) =>
         new n.LoadModule(getClassInfo(className))
 
-      case StoreModule(className, value) =>
-        new n.StoreModule(getClassInfo(className), compile(value))
+      case StoreModule() =>
+        new n.StoreModule(envBuilder.enclosingClassInfo.get)
 
-      case Select(qualifier, className, field) =>
-        val fieldIndex = getClassInfo(className).fieldDefIndices.apply(field.name)
+      case Select(qualifier, field) =>
+        val fieldIndex = getClassInfo(field.name.className).fieldDefIndices.apply(field.name)
         new n.Select(compile(qualifier), field.name.nameString, fieldIndex)
 
-      case SelectStatic(className, field) =>
-        new n.SelectStatic(getClassInfo(className), field.name)
+      case SelectStatic(field) =>
+        new n.SelectStatic(getClassInfo(field.name.className), field.name)
 
       case SelectJSNativeMember(className, member) =>
         new n.SelectJSNativeMember(getClassInfo(className), member.name)
@@ -197,8 +200,8 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case JSNew(ctor, args) =>
         new n.JSNew(compile(ctor), compileExprOrJSSpreads(args))
 
-      case JSPrivateSelect(qualifier, className, field) =>
-        new n.JSPrivateSelect(compile(qualifier), className, field.name)
+      case JSPrivateSelect(qualifier, field) =>
+        new n.JSPrivateSelect(compile(qualifier), field.name)
 
       case JSSelect(qualifier, item) =>
         new n.JSSelect(compile(qualifier), compile(item))
@@ -300,7 +303,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.This()
 
       case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
-        new n.Closure(arrow, compileJSBody(captureParams, params, restParam, body), captureValues.map(compile))
+        new n.Closure(arrow, compileJSBody(None, captureParams, params, restParam, body), captureValues.map(compile))
 
       case CreateJSClass(className, captureValues) =>
         new n.CreateJSClass(getClassInfo(className), captureValues.map(compile))
@@ -324,7 +327,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
     val superClass: n.JSBody = classDef.jsSuperClass match {
       case Some(superClassTree) =>
-        compileJSBody(classCaptures, Nil, None, superClassTree)
+        compileJSBody(None, classCaptures, Nil, None, superClassTree)
       case None =>
         val superClassInfo = classInfo.superClass.getOrElse {
           throw new AssertionError(s"No superclass for JS class $classInfo at $pos")
@@ -339,7 +342,9 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
       val body = ctorDef.body
 
-      val ctorEnvBuilder = new EnvBuilder(classCaptures).addParams(ctorDef.args).addRestParam(ctorDef.restParam)
+      val ctorEnvBuilder = new EnvBuilder(Some(classInfo), classCaptures)
+        .addParams(ctorDef.args)
+        .addRestParam(ctorDef.restParam)
       val beforeSuperConstructor = compileList(body.beforeSuper)(ctorEnvBuilder)
       val superConstructorArgs = compileExprOrJSSpreads(body.superCall.args)(ctorEnvBuilder)
       val afterSuperConstructor = compileList(body.afterSuper)(ctorEnvBuilder)
@@ -379,30 +384,30 @@ private[core] final class Compiler(interpreter: Interpreter) {
   def compileJSFieldDef(owner: ClassInfo, fieldDef: JSFieldDef): n.JSFieldDef = {
     implicit val pos = fieldDef.pos
     val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
-    new n.JSFieldDef(compileJSBody(captureParams, Nil, None, fieldDef.name), Types.zeroOf(fieldDef.ftpe))
+    new n.JSFieldDef(compileJSBody(None, captureParams, Nil, None, fieldDef.name), Types.zeroOf(fieldDef.ftpe))
   }
 
   def compileJSMethodDef(owner: ClassInfo, methodDef: JSMethodDef): n.JSMethodDef = {
     implicit val pos = methodDef.pos
     val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
-    new n.JSMethodDef(owner, compileJSBody(captureParams, Nil, None, methodDef.name),
+    new n.JSMethodDef(owner, compileJSBody(None, captureParams, Nil, None, methodDef.name),
         methodDef.args, methodDef.restParam,
-        compileJSBody(captureParams, methodDef.args, methodDef.restParam, methodDef.body))
+        compileJSBody(Some(owner), captureParams, methodDef.args, methodDef.restParam, methodDef.body))
   }
 
   def compileJSPropertyDef(owner: ClassInfo, propertyDef: JSPropertyDef): n.JSPropertyDef = {
     implicit val pos = propertyDef.pos
     val captureParams = owner.classDef.jsClassCaptures.getOrElse(Nil)
-    new n.JSPropertyDef(owner, compileJSBody(captureParams, Nil, None, propertyDef.name),
-        propertyDef.getterBody.map(compileJSBody(captureParams, Nil, None, _)),
+    new n.JSPropertyDef(owner, compileJSBody(None, captureParams, Nil, None, propertyDef.name),
+        propertyDef.getterBody.map(compileJSBody(Some(owner), captureParams, Nil, None, _)),
         propertyDef.setterArgAndBody.map {
-          case (paramDef, body) => compileJSBody(captureParams, List(paramDef), None, body)
+          case (paramDef, body) => compileJSBody(Some(owner), captureParams, List(paramDef), None, body)
         })
   }
 }
 
 private[core] object Compiler {
-  private final class EnvBuilder(captureParams: List[ParamDef]) {
+  private final class EnvBuilder(val enclosingClassInfo: Option[ClassInfo], captureParams: List[ParamDef]) {
     val storages = mutable.Map.empty[LocalName, LocalStorage]
 
     val captureParamCount = captureParams.size

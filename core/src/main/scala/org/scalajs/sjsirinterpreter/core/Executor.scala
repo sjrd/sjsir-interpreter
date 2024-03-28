@@ -178,7 +178,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
           case TopLevelModuleExportDef(_, _) =>
             loadModuleGeneric(classInfo)
           case TopLevelMethodExportDef(_, JSMethodDef(flags, _, args, restParam, body)) =>
-            val compiledBody = interpreter.compiler.compileJSBody(Nil, args, restParam, body)
+            val compiledBody = interpreter.compiler.compileJSBody(None, Nil, args, restParam, body)
             createJSThisFunction(className.nameString, exportName, Env.emptyCaptures, compiledBody)
           case TopLevelFieldExportDef(_, _, FieldIdent(fieldName)) =>
             classInfo.registerStaticFieldMirror(fieldName, exportName)
@@ -225,7 +225,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
     stack.enter(pos, methodInfo) {
       val compiledBody = methodInfo.getCompiledBody {
         val methodDef = methodInfo.methodDef
-        interpreter.compiler.compileBody(methodDef.args, methodDef.body.get)
+        interpreter.compiler.compileBody(Some(methodInfo.owner), methodDef.args, methodDef.body.get)
       }
       compiledBody.eval(receiver, args)
     }
@@ -664,7 +664,7 @@ private[core] object Executor {
   val BoxedStringRef = ClassRef(BoxedStringClass)
   val StackTraceArrayTypeRef = ArrayTypeRef(ClassRef(StackTraceElementClass), 1)
 
-  val exceptionFieldName = FieldName("exception")
+  val exceptionFieldName = FieldName(JavaScriptExceptionClass, SimpleFieldName("exception"))
 
   val anyArgCtor = MethodName.constructor(List(ClassRef(ObjectClass)))
   val stringArgCtor = MethodName.constructor(List(ClassRef(BoxedStringClass)))
