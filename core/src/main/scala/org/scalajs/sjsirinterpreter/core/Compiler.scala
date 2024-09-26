@@ -14,7 +14,7 @@ import org.scalajs.sjsirinterpreter.core.values.LongInstance
 private[core] final class Compiler(interpreter: Interpreter) {
   import Compiler._
 
-  private implicit val executor = interpreter.executor
+  private implicit val executor: Executor = interpreter.executor
 
   import interpreter.getClassInfo
 

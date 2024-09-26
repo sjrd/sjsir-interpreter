@@ -7,7 +7,7 @@ inThisBuild(Def.settings(
   developers += Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd")),
   versionScheme := Some("early-semver"),
 
-  scalaVersion := "2.13.10",
+  scalaVersion := "2.13.13",
 
   scalacOptions ++= Seq(
     "-encoding", "utf-8",
