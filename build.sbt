@@ -1,4 +1,5 @@
 import org.scalajs.linker.interface.ESVersion
+import org.scalajs.linker.interface.OutputPatterns
 
 inThisBuild(Def.settings(
   organization := "be.doeraene",
@@ -22,6 +23,13 @@ inThisBuild(Def.settings(
 val scalaJSStdLib = taskKey[File]("jar of the scalajs-library")
 
 val fetchScalaJSSource = taskKey[File]("Fetches the source code of Scala.js")
+
+val commonNodeJSArgs = List(
+  "--enable-source-maps",
+  "--experimental-wasm-exnref",
+  "--experimental-wasm-imported-strings",
+  "--turboshaft-wasm",
+)
 
 lazy val root = project
   .in(file("."))
@@ -66,7 +74,9 @@ lazy val `sjsir-interpreter-cli` = project
     publish / skip := true,
     scalaJSUseMainModuleInitializer := true,
     scalaJSLinkerConfig ~= {
-      _.withModuleKind(ModuleKind.CommonJSModule),
+      _.withModuleKind(ModuleKind.ESModule)
+        .withOutputPatterns(OutputPatterns.fromJSFile("%s.mjs"))
+        .withExperimentalUseWebAssembly(true)
     },
   )
 
@@ -116,7 +126,7 @@ lazy val sample = project
       import org.scalajs.jsenv.nodejs.NodeJSEnv
       val cp = Attributed.data((Compile / fullClasspath).value).mkString(";")
       val env = Map("SCALAJS_CLASSPATH" -> cp, "SCALAJS_MODE" -> "sample")
-      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
+      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(commonNodeJSArgs))
     },
 
     Compile / jsEnvInput := (`sjsir-interpreter-cli` / Compile / jsEnvInput).value,
@@ -218,7 +228,7 @@ lazy val `scalajs-test-suite` = project
       import org.scalajs.jsenv.nodejs.NodeJSEnv
       val cp = Attributed.data((Test / fullClasspath).value).mkString(";")
       val env = Map("SCALAJS_CLASSPATH" -> cp, "SCALAJS_MODE" -> "scalajs-test-suite")
-      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(List("--enable-source-maps")))
+      new NodeJSEnv(NodeJSEnv.Config().withEnv(env).withArgs(commonNodeJSArgs))
     },
 
     Test / jsEnvInput := {
