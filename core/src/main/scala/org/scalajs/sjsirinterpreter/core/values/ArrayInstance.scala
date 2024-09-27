@@ -22,23 +22,10 @@ private[core] object ArrayInstance {
   def fromList(typeRef: ArrayTypeRef, list: List[js.Any]): ArrayInstance =
     new ArrayInstance(typeRef, list.toArray)
 
-  def createWithDimensions(typeRef: ArrayTypeRef, lengths: List[Int]): ArrayInstance = {
-    if (lengths.isEmpty || lengths.sizeIs > typeRef.dimensions)
-      throw new AssertionError(s"invalid lengths $lengths for array type ${typeRef.displayName}")
-
-    val length = lengths.head
-    val tailLengths = lengths.tail
-
+  def createWithLength(typeRef: ArrayTypeRef, length: Int): ArrayInstance = {
     val resultContents = new Array[js.Any](length)
-    if (tailLengths.isEmpty) {
-      val zero = if (typeRef.dimensions > 1) null else Types.zeroOfRef(typeRef.base)
-      java.util.Arrays.fill(resultContents.asInstanceOf[Array[AnyRef]], zero)
-    } else {
-      val innerTypeRef = ArrayTypeRef(typeRef.base, typeRef.dimensions - 1)
-      for (i <- 0 until length)
-        resultContents(i) = createWithDimensions(innerTypeRef, tailLengths)
-    }
-
+    val zero = if (typeRef.dimensions > 1) null else Types.zeroOfRef(typeRef.base)
+    java.util.Arrays.fill(resultContents.asInstanceOf[Array[AnyRef]], zero)
     new ArrayInstance(typeRef, resultContents)
   }
 
