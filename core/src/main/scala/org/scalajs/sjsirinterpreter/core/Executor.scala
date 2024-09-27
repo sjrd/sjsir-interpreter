@@ -239,7 +239,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
         if (e.className == null) "<jscode>" else e.className,
         if (e.methodName == null) "<jscode>" else e.methodName,
         if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
-        if (e.pos.isEmpty) -1 else e.pos.line,
+        if (e.pos.isEmpty) -1 else (e.pos.line + 1),
       )
       newInstanceWithConstructor(stackTraceElementCtorInfo, args)
     }
