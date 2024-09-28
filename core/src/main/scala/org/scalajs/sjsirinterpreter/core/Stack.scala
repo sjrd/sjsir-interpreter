@@ -57,5 +57,8 @@ private[core] final class Stack {
 }
 
 private[core] object Stack {
-  final class Element(val className: String, val methodName: String, val pos: Position)
+  final class Element(val className: String, val methodName: String, val pos: Position) {
+    override def toString(): String =
+      s"Element($className, $methodName, $pos)"
+  }
 }

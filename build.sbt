@@ -7,7 +7,7 @@ inThisBuild(Def.settings(
   developers += Developer("sjrd", "Sébastien Doeraene", "sjrdoeraene@gmail.com", url("https://github.com/sjrd")),
   versionScheme := Some("early-semver"),
 
-  scalaVersion := "2.13.10",
+  scalaVersion := "2.13.13",
 
   scalacOptions ++= Seq(
     "-encoding", "utf-8",
@@ -36,7 +36,7 @@ lazy val `sjsir-interpreter` = project
   .settings(
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.16.0",
+      "org.scala-js" %%% "scalajs-linker" % "1.17.0",
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
     scalaJSLinkerConfig ~= {

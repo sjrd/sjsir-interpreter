@@ -8,6 +8,7 @@ import scala.scalajs.js
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.runtime.toScalaVarArgs // TODO Can we avoid this?
 
+import org.scalajs.ir.ClassKind
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Trees
@@ -473,6 +474,7 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any = {
       import Trees.UnaryOp._
+      import executor.interpreter.getClassInfo
 
       val value = lhs.eval()
 
@@ -483,6 +485,7 @@ private[core] object Nodes {
       @inline def floatValue: Float = value.asInstanceOf[Float]
       @inline def doubleValue: Double = value.asInstanceOf[Double]
       @inline def stringValue: String = value.asInstanceOf[String]
+      @inline def classValue: TypeRef = value.asInstanceOf[Instance.ClassInstance].typeRef
 
       (op: @switch) match {
         case Boolean_!     => !booleanValue
@@ -501,6 +504,49 @@ private[core] object Nodes {
 
         case ByteToInt | ShortToInt | IntToDouble | FloatToDouble =>
           value
+
+        case CheckNotNull =>
+          value
+
+        case Class_name =>
+          executor.getClassName(classValue)
+
+        case Class_isPrimitive =>
+          classValue.isInstanceOf[PrimRef]
+
+        case Class_isInterface =>
+          val result: Boolean = classValue match {
+            case ClassRef(className) => getClassInfo(className).kind == ClassKind.Interface
+            case _                   => false
+          }
+          result
+
+        case Class_isArray =>
+          classValue.isInstanceOf[ArrayTypeRef]
+
+        case Class_componentType =>
+          val result: Instance.ClassInstance = classValue match {
+            case ArrayTypeRef(base, dimensions) =>
+              if (dimensions == 1) executor.getClassOf(base)
+              else executor.getClassOf(ArrayTypeRef(base, dimensions - 1))
+            case _ =>
+              null
+          }
+          result
+
+        case Class_superClass =>
+          val result: Instance.ClassInstance = classValue match {
+            case _: PrimRef =>
+              null
+            case ClassRef(className) =>
+              getClassInfo(className).superClass match {
+                case Some(superClass) => executor.getClassOf(superClass.typeRef)
+                case None             => null
+              }
+            case _: ArrayTypeRef =>
+              executor.getClassOf(ClassRef(ObjectClass))
+          }
+          result
       }
     }
   }
@@ -511,6 +557,7 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any = {
       import org.scalajs.ir.Trees.BinaryOp._
+      import executor.interpreter.getClassInfo
 
       val lhsValue = lhs.eval()
       val rhsValue = rhs.eval()
@@ -521,12 +568,14 @@ private[core] object Nodes {
       @inline def floatLHSValue: Float = lhsValue.asInstanceOf[Float]
       @inline def doubleLHSValue: Double = lhsValue.asInstanceOf[Double]
       @inline def stringLHSValue: String = lhsValue.asInstanceOf[String]
+      @inline def classLHSValue: TypeRef = lhsValue.asInstanceOf[Instance.ClassInstance].typeRef
 
       @inline def booleanRHSValue: Boolean = rhsValue.asInstanceOf[Boolean]
       @inline def intRHSValue: Int = rhsValue.asInstanceOf[Int]
       @inline def longRHSValue: Long = rhsValue.asInstanceOf[LongInstance].value
       @inline def floatRHSValue: Float = rhsValue.asInstanceOf[Float]
       @inline def doubleRHSValue: Double = rhsValue.asInstanceOf[Double]
+      @inline def classRHSValue: TypeRef = rhsValue.asInstanceOf[Instance.ClassInstance].typeRef
 
       def checkIntDivByZero(x: Int): Int = {
         if (x == 0)
@@ -611,16 +660,72 @@ private[core] object Nodes {
         case Double_>= => doubleLHSValue >= doubleRHSValue
 
         case String_charAt => new CharInstance(stringLHSValue.charAt(intRHSValue))
+
+        case Class_isInstance =>
+          val result: Boolean = classLHSValue match {
+            case _: PrimRef =>
+              false
+            case ClassRef(className) =>
+              val isInstanceFun = executor.getIsInstanceOfFun(ClassType(className, nullable = false))
+              isInstanceFun(rhsValue)
+            case typeRef: ArrayTypeRef =>
+              val isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
+              isInstanceFun(rhsValue)
+          }
+          result
+
+        case Class_isAssignableFrom =>
+          val result: Boolean = (classLHSValue, classRHSValue) match {
+            case (lhsTypeRef, rhsTypeRef) if lhsTypeRef == rhsTypeRef =>
+              true
+            case (ClassRef(lhsClassName), ClassRef(rhsClassName)) =>
+              getClassInfo(rhsClassName).isSubclass(lhsClassName)
+            case (ClassRef(lhsClassName), _: ArrayTypeRef) =>
+              lhsClassName == ObjectClass || lhsClassName == CloneableClass || lhsClassName == SerializableClass
+            case (lhsTypeRef: ArrayTypeRef, rhsTypeRef: ArrayTypeRef) =>
+              isSubtype(ArrayType(rhsTypeRef, nullable = false), ArrayType(lhsTypeRef, nullable = false)) {
+                (lhs, rhs) => getClassInfo(lhs).isSubclass(rhs)
+              }
+            case _ =>
+              false
+          }
+          result
+
+        case Class_cast =>
+          def castFail(message: String): Nothing =
+            executor.throwVMException(ClassCastExceptionClass, message)
+
+          classLHSValue match {
+            case typeRef: PrimRef =>
+              castFail(s"cannot cast to primitive type ${typeRef.displayName}")
+            case typeRef @ ClassRef(className) =>
+              val castAlwaysOK = className == ObjectClass || getClassInfo(className).kind.isJSType
+              def isInstanceFun = executor.getIsInstanceOfFun(ClassType(className, nullable = false))
+              if (!(castAlwaysOK || rhsValue == null || isInstanceFun(rhsValue)))
+                castFail(s"$rhsValue is not an instance of ${executor.getClassName(typeRef)}")
+            case typeRef: ArrayTypeRef =>
+              def isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
+              if (!(rhsValue == null || isInstanceFun(rhsValue)))
+                castFail(s"$rhsValue is not an instance of ${executor.getClassName(typeRef)}")
+          }
+
+          rhsValue
+
+        case Class_newArray =>
+          val typeRef = classLHSValue
+          if (typeRef == VoidRef)
+            executor.throwVMException(IllegalArgumentExceptionClass, null)
+          ArrayInstance.createWithLength(ArrayTypeRef.of(typeRef), intRHSValue)
       }
     }
   }
 
-  final class NewArray(typeRef: ArrayTypeRef, lengths: List[Node])(
+  final class NewArray(typeRef: ArrayTypeRef, length: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any =
-      ArrayInstance.createWithDimensions(typeRef, lengths.map(l => Types.asInt(l.eval())))
+      ArrayInstance.createWithLength(typeRef, Types.asInt(length.eval()))
   }
 
   final class ArrayValue(typeRef: ArrayTypeRef, elems: List[Node])(

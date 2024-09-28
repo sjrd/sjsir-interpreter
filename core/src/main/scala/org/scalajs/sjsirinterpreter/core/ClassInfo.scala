@@ -23,8 +23,6 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
 
   val typeRef: ClassRef = ClassRef(className)
 
-  val toType: Type = if (kind.isJSType) AnyType else ClassType(className)
-
   override def toString(): String = classNameString
 
   private var staticInitializerRun: Boolean = {

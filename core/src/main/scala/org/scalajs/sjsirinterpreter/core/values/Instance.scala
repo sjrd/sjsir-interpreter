@@ -8,6 +8,7 @@ import scala.scalajs.js.annotation._
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
+import org.scalajs.ir.Types._
 
 import org.scalajs.sjsirinterpreter.core._
 
@@ -22,10 +23,26 @@ private[core] trait Instance extends js.Object {
 private[core] object Instance {
   val instanceClassInfo: js.Symbol = js.Symbol("classInfo")
   val instanceFields: js.Symbol = js.Symbol("fields")
+  val instanceTypeRef: js.Symbol = js.Symbol("typeRef")
 
   private abstract class ObjectInstance extends js.Object
 
   private abstract class ThrowableInstance extends js.Error
+
+  trait ClassInstance extends Instance {
+    @JSName(instanceTypeRef)
+    val typeRef: TypeRef
+  }
+
+  def createTypeRefField(instance: Instance, typeRef: TypeRef): ClassInstance = {
+    js.Dynamic.global.Object.defineProperty(instance, instanceTypeRef, new js.PropertyDescriptor {
+      configurable = false
+      enumerable = false
+      writable = false
+      value = typeRef
+    })
+    instance.asInstanceOf[ClassInstance]
+  }
 
   def newInstanceClass(classInfo: ClassInfo)(implicit pos: Position): js.Dynamic = {
     val fieldsTemplate = classInfo.fieldsTemplate

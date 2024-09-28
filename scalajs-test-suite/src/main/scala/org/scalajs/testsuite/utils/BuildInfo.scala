@@ -19,4 +19,5 @@ private[utils] object BuildInfo {
   final val productionMode = false
   final val esVersion = 6
   final val useECMAScript2015Semantics = true
+  final val isWebAssembly = false
 }

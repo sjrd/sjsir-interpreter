@@ -14,7 +14,7 @@ import org.scalajs.sjsirinterpreter.core.values.LongInstance
 private[core] final class Compiler(interpreter: Interpreter) {
   import Compiler._
 
-  private implicit val executor = interpreter.executor
+  private implicit val executor: Executor = interpreter.executor
 
   import interpreter.getClassInfo
 
@@ -162,8 +162,8 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case BinaryOp(op, lhs, rhs) =>
         new n.BinaryOp(op, compile(lhs), compile(rhs))
 
-      case NewArray(tpe, lengths) =>
-        new n.NewArray(tpe, lengths map compile)
+      case NewArray(tpe, length) =>
+        new n.NewArray(tpe, compile(length))
 
       case ArrayValue(tpe, elems) =>
         new n.ArrayValue(tpe, elems map compile)
@@ -178,7 +178,8 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.IsInstanceOf(compile(expr), executor.getIsInstanceOfFun(testType))
 
       case AsInstanceOf(expr, tpe) =>
-        new n.AsInstanceOf(compile(expr), tpe, executor.getIsInstanceOfFun(tpe), Types.zeroOf(tpe))
+        val testType = tpe.toNonNullable
+        new n.AsInstanceOf(compile(expr), tpe, executor.getIsInstanceOfFun(testType), Types.zeroOf(tpe))
 
       case GetClass(expr) =>
         new n.GetClass(compile(expr))
