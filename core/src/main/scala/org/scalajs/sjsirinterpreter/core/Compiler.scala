@@ -3,8 +3,10 @@ package org.scalajs.sjsirinterpreter.core
 import scala.collection.mutable
 
 import scala.scalajs.js
+import scala.scalajs.LinkingInfo
 
 import org.scalajs.ir.Names.LocalName
+import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core.{Nodes => n}
@@ -68,13 +70,13 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Block(compileList(stats))
 
       case Labeled(label, tpe, body) =>
-        new n.Labeled(label.name, compile(body))
+        new n.Labeled(label, compile(body))
 
       case Assign(lhs, rhs) =>
         new n.Assign(compile(lhs).asInstanceOf[n.AssignLhs], compile(rhs))
 
       case Return(expr, label) =>
-        new n.Return(compile(expr), label.name)
+        new n.Return(compile(expr), label)
 
       case If(cond, thenp, elsep) =>
         new n.If(compile(cond), compile(thenp), compile(elsep))
@@ -92,9 +94,6 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
       case TryFinally(block, finalizer) =>
         new n.TryFinally(compile(block), compile(finalizer))
-
-      case Throw(expr) =>
-        new n.Throw(compile(expr))
 
       case Match(selector, cases, default) =>
         def compileMatchableLiteral(lit: MatchableLiteral): js.Any = {
@@ -168,9 +167,6 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case ArrayValue(tpe, elems) =>
         new n.ArrayValue(tpe, elems map compile)
 
-      case ArrayLength(array) =>
-        new n.ArrayLength(compile(array))
-
       case ArraySelect(array, index) =>
         new n.ArraySelect(compile(array), compile(index))
 
@@ -180,21 +176,6 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case AsInstanceOf(expr, tpe) =>
         val testType = tpe.toNonNullable
         new n.AsInstanceOf(compile(expr), tpe, executor.getIsInstanceOfFun(testType), Types.zeroOf(tpe))
-
-      case GetClass(expr) =>
-        new n.GetClass(compile(expr))
-
-      case Clone(expr) =>
-        new n.Clone(compile(expr))
-
-      case IdentityHashCode(expr) =>
-        new n.IdentityHashCode(compile(expr))
-
-      case WrapAsThrowable(expr) =>
-        new n.WrapAsThrowable(compile(expr))
-
-      case UnwrapFromThrowable(expr) =>
-        new n.UnwrapFromThrowable(compile(expr))
 
       // JavaScript expressions
 
@@ -246,13 +227,13 @@ private[core] final class Compiler(interpreter: Interpreter) {
         })
 
       case JSGlobalRef(name) =>
-        new n.JSGlobalRef(name)
+        if (name == JSGlobalRef.FileLevelThis)
+          new n.Literal(js.Dynamic.global.globalThis)
+        else
+          new n.JSGlobalRef(name)
 
       case JSTypeOfGlobalRef(globalRef) =>
         new n.JSTypeOfGlobalRef(globalRef.name)
-
-      case JSLinkingInfo() =>
-        new n.JSLinkingInfo()
 
       // Literals
 
@@ -292,16 +273,25 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case ClassOf(typeRef) =>
         new n.ClassOf(typeRef)
 
+      case LinkTimeProperty(name) =>
+        import LinkTimeProperty._
+        val value: js.Any = name match {
+          case ProductionMode             => false
+          case ESVersion                  => LinkingInfo.ESVersion.ES2015
+          case UseECMAScript2015Semantics => true
+          case IsWebAssembly              => false
+          case LinkerVersion              => ScalaJSVersions.current
+        }
+        new n.Literal(value)
+
       // Atomic expressions
 
-      case VarRef(ident) =>
-        envBuilder.storages(ident.name) match {
+      case VarRef(name) =>
+        envBuilder.storages(name) match {
           case LocalStorage.Capture(index) => new n.CaptureRef(index)
           case LocalStorage.Local(index)   => new n.LocalVarRef(index)
+          case LocalStorage.This           => new n.This()
         }
-
-      case This() =>
-        new n.This()
 
       case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
         new n.Closure(arrow, compileJSBody(None, captureParams, params, restParam, body), captureValues.map(compile))
@@ -411,6 +401,9 @@ private[core] object Compiler {
   private final class EnvBuilder(val enclosingClassInfo: Option[ClassInfo], captureParams: List[ParamDef]) {
     val storages = mutable.Map.empty[LocalName, LocalStorage]
 
+    // TODO Ideally we would only add the binding for `this` when it actually exists
+    storages(LocalName.This) = LocalStorage.This
+
     val captureParamCount = captureParams.size
     for ((captureParam, index) <- captureParams.zipWithIndex)
       storages(captureParam.name.name) = LocalStorage.Capture(index)
@@ -445,5 +438,6 @@ private[core] object Compiler {
   private object LocalStorage {
     final case class Capture(index: Int) extends LocalStorage
     final case class Local(index: Int) extends LocalStorage
+    final case object This extends LocalStorage
   }
 }

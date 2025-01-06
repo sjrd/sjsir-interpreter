@@ -81,11 +81,11 @@ object TestIRBuilder {
 
   def trivialCtor(enclosingClassName: ClassName): MethodDef = {
     val flags = MemberFlags.empty.withNamespace(MemberNamespace.Constructor)
-    MethodDef(flags, MethodIdent(NoArgConstructorName), NON, Nil, NoType,
+    MethodDef(flags, MethodIdent(NoArgConstructorName), NON, Nil, VoidType,
         Some(ApplyStatically(EAF.withConstructor(true),
             This()(ClassType(enclosingClassName, nullable = false)),
             ObjectClass, MethodIdent(NoArgConstructorName),
-            Nil)(NoType)))(
+            Nil)(VoidType)))(
         EOH, NOV)
   }
 
@@ -101,7 +101,7 @@ object TestIRBuilder {
   def mainMethodDef(body: Tree): MethodDef = {
     val argsParamDef = paramDef("args", ArrayType(AT, nullable = true))
     MethodDef(MemberFlags.empty.withNamespace(MemberNamespace.PublicStatic),
-        MainMethodName, NON, List(argsParamDef), NoType, Some(body))(
+        MainMethodName, NON, List(argsParamDef), VoidType, Some(body))(
         EOH, NOV)
   }
 
@@ -141,8 +141,6 @@ object TestIRBuilder {
 
   implicit def string2LocalIdent(name: String): LocalIdent =
     LocalIdent(LocalName(name))
-  implicit def string2LabelIdent(name: String): LabelIdent =
-    LabelIdent(LabelName(name))
   implicit def string2ClassIdent(name: String): ClassIdent =
     ClassIdent(ClassName(name))
 
