@@ -5,14 +5,12 @@ import scala.annotation.switch
 import scala.collection.mutable
 
 import scala.scalajs.js
-import scala.scalajs.LinkingInfo
 
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Types._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Position.NoPosition
-import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.ClassKind._
 
 import org.scalajs.linker.interface.ModuleInitializer
@@ -26,17 +24,6 @@ private[core] final class Executor(val interpreter: Interpreter) {
   import interpreter.getClassInfo
 
   val fieldsSymbol = js.Symbol("fields")
-
-  val linkingInfo: js.Object = {
-    js.Object.freeze(js.Dynamic.literal(
-      esVersion = LinkingInfo.ESVersion.ES2015,
-      assumingES6 = true,
-      isWebAssembly = false,
-      productionMode = false,
-      linkerVersion = ScalaJSVersions.current,
-      fileLevelThis = js.Dynamic.global.globalThis,
-    ))
-  }
 
   val stack = new Stack()
 

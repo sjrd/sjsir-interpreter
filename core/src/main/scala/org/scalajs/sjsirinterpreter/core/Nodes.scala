@@ -290,14 +290,6 @@ private[core] object Nodes {
     }
   }
 
-  final class Throw(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any =
-      js.special.`throw`(expr.eval())
-  }
-
   final class Match(selector: Node, cases: Map[js.Any, Node], default: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
@@ -547,6 +539,69 @@ private[core] object Nodes {
               executor.getClassOf(ClassRef(ObjectClass))
           }
           result
+
+        case Array_length =>
+          value.asInstanceOf[ArrayInstance].contents.length
+
+        case GetClass =>
+          import executor.getClassOf
+
+          (value: Any) match {
+            case Instance(instance)   => getClassOf(instance.classInfo.typeRef)
+            case array: ArrayInstance => getClassOf(array.typeRef)
+            case _: LongInstance      => getClassOf(executor.boxedLongClassInfo.typeRef)
+            case _: CharInstance      => getClassOf(executor.boxedCharacterClassInfo.typeRef)
+            case _: String            => getClassOf(executor.boxedStringClassInfo.typeRef)
+            case _: Byte              => getClassOf(executor.boxedByteClassInfo.typeRef)
+            case _: Short             => getClassOf(executor.boxedShortClassInfo.typeRef)
+            case _: Int               => getClassOf(executor.boxedIntegerClassInfo.typeRef)
+            case _: Float             => getClassOf(executor.boxedFloatClassInfo.typeRef)
+            case _: Double            => getClassOf(executor.boxedDoubleClassInfo.typeRef)
+            case _: Boolean           => getClassOf(executor.boxedBooleanClassInfo.typeRef)
+            case ()                   => getClassOf(executor.boxedUnitClassInfo.typeRef)
+            case _                    => null
+          }
+
+        case Clone =>
+          value match {
+            case Instance(value) =>
+              val result = executor.createNewInstance(value.classInfo)
+              System.arraycopy(value.fields, 0, result.fields, 0, result.fields.length)
+              result
+            case value: ArrayInstance =>
+              ArrayInstance.clone(value)
+            case _ =>
+              throw new AssertionError(s"unexpected value $value for Clone at $pos")
+          }
+
+        case IdentityHashCode =>
+          System.identityHashCode(value)
+
+        case WrapAsThrowable =>
+          value match {
+            case Instance(instance) if instance.classInfo.isSubclass(ThrowableClass) =>
+              value
+            case _ =>
+              executor.newInstanceWithConstructor(executor.jsExceptionCtorInfo, value :: Nil)
+          }
+
+        case UnwrapFromThrowable =>
+          value match {
+            case Instance(instance) =>
+              if (instance.classInfo.isSubclass(JavaScriptExceptionClass)) {
+                // TODO Cache this
+                val fieldIndex =
+                  executor.jsExceptionClassInfo.fieldDefIndices.apply(Executor.exceptionFieldName)
+                instance.fields(fieldIndex)
+              } else {
+                instance
+              }
+            case _ =>
+              throw new AssertionError(s"Unexpected value $value in Select node at $pos")
+          }
+
+        case Throw =>
+          js.special.`throw`(value)
       }
     }
   }
@@ -736,14 +791,6 @@ private[core] object Nodes {
       ArrayInstance.fromList(typeRef, elems.map(_.eval()))
   }
 
-  final class ArrayLength(array: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any =
-      array.eval().asInstanceOf[ArrayInstance].contents.length
-  }
-
   final class ArraySelect(array: Node, index: Node)(
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
@@ -781,96 +828,6 @@ private[core] object Nodes {
         value
       else
         executor.throwVMException(ClassCastExceptionClass, s"$value cannot be cast to ${tpe.show()}")
-    }
-  }
-
-  final class GetClass(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any = {
-      import executor.getClassOf
-
-      (expr.eval(): Any) match {
-        case Instance(instance)   => getClassOf(instance.classInfo.typeRef)
-        case array: ArrayInstance => getClassOf(array.typeRef)
-        case _: LongInstance      => getClassOf(executor.boxedLongClassInfo.typeRef)
-        case _: CharInstance      => getClassOf(executor.boxedCharacterClassInfo.typeRef)
-        case _: String            => getClassOf(executor.boxedStringClassInfo.typeRef)
-        case _: Byte              => getClassOf(executor.boxedByteClassInfo.typeRef)
-        case _: Short             => getClassOf(executor.boxedShortClassInfo.typeRef)
-        case _: Int               => getClassOf(executor.boxedIntegerClassInfo.typeRef)
-        case _: Float             => getClassOf(executor.boxedFloatClassInfo.typeRef)
-        case _: Double            => getClassOf(executor.boxedDoubleClassInfo.typeRef)
-        case _: Boolean           => getClassOf(executor.boxedBooleanClassInfo.typeRef)
-        case ()                   => getClassOf(executor.boxedUnitClassInfo.typeRef)
-        case _                    => null
-      }
-    }
-  }
-
-  final class Clone(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any = {
-      val value = expr.eval()
-      value match {
-        case Instance(value) =>
-          val result = executor.createNewInstance(value.classInfo)
-          System.arraycopy(value.fields, 0, result.fields, 0, result.fields.length)
-          result
-        case value: ArrayInstance =>
-          ArrayInstance.clone(value)
-        case _ =>
-          throw new AssertionError(s"unexpected value $value for Clone at $pos")
-      }
-    }
-  }
-
-  final class IdentityHashCode(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any =
-      System.identityHashCode(expr.eval())
-  }
-
-  final class WrapAsThrowable(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any = {
-      val value = expr.eval()
-      value match {
-        case Instance(instance) if instance.classInfo.isSubclass(ThrowableClass) =>
-          value
-        case rest =>
-          executor.newInstanceWithConstructor(executor.jsExceptionCtorInfo, value :: Nil)
-      }
-    }
-  }
-
-  final class UnwrapFromThrowable(expr: Node)(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    private val fieldIndex =
-      executor.jsExceptionClassInfo.fieldDefIndices.apply(Executor.exceptionFieldName)
-
-    override def eval()(implicit env: Env): js.Any = {
-      expr.eval() match {
-        case Instance(instance) =>
-          if (instance.classInfo.isSubclass(JavaScriptExceptionClass))
-            instance.fields(fieldIndex)
-          else
-            instance
-        case null =>
-          executor.throwVMException(NullPointerExceptionClass,
-              s"unwrapFromThrowable(null)")
-        case rest =>
-          throw new AssertionError(s"Unexpected value $rest in Select node at $pos")
-      }
     }
   }
 
@@ -1152,14 +1109,6 @@ private[core] object Nodes {
 
     override def eval()(implicit env: Env): js.Any =
       getter()
-  }
-
-  final class JSLinkingInfo()(
-      implicit executor: Executor, pos: Position)
-      extends Node {
-
-    override def eval()(implicit env: Env): js.Any =
-      executor.linkingInfo
   }
 
   // Literals
