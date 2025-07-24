@@ -2,6 +2,8 @@ package org.scalajs.sjsirinterpreter.core
 
 import scala.annotation.switch
 
+import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
+
 import scala.collection.mutable
 
 import scala.scalajs.js
@@ -630,6 +632,21 @@ private[core] object Nodes {
 
         case Throw =>
           js.special.`throw`(value)
+
+        case Float_toBits =>
+          JFloat.floatToRawIntBits(floatValue)
+        case Float_fromBits =>
+          JFloat.intBitsToFloat(intValue)
+        case Double_toBits =>
+          new LongInstance(JDouble.doubleToRawLongBits(doubleValue))
+        case Double_fromBits =>
+          JDouble.longBitsToDouble(longValue)
+        case Int_clz =>
+          Integer.numberOfLeadingZeros(intValue)
+        case Long_clz =>
+          JLong.numberOfLeadingZeros(longValue)
+        case UnsignedIntToLong =>
+          new LongInstance(Integer.toUnsignedLong(intValue))
       }
     }
   }
@@ -805,6 +822,25 @@ private[core] object Nodes {
           if (typeRef == VoidRef)
             executor.throwVMException(IllegalArgumentExceptionClass, null)
           ArrayInstance.createWithLength(ArrayTypeRef.of(typeRef), intRHSValue)
+
+        case Int_unsigned_/ =>
+          Integer.divideUnsigned(intLHSValue, checkIntDivByZero(intRHSValue))
+        case Int_unsigned_% =>
+          Integer.remainderUnsigned(intLHSValue, checkIntDivByZero(intRHSValue))
+        case Long_unsigned_/ =>
+          new LongInstance(JLong.divideUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+        case Long_unsigned_% =>
+          new LongInstance(JLong.remainderUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+
+        case Int_unsigned_<  => (intLHSValue ^ Int.MinValue) < (intRHSValue ^ Int.MinValue)
+        case Int_unsigned_<= => (intLHSValue ^ Int.MinValue) <= (intRHSValue ^ Int.MinValue)
+        case Int_unsigned_>  => (intLHSValue ^ Int.MinValue) > (intRHSValue ^ Int.MinValue)
+        case Int_unsigned_>= => (intLHSValue ^ Int.MinValue) >= (intRHSValue ^ Int.MinValue)
+
+        case Long_unsigned_<  => (longLHSValue ^ Long.MinValue) < (longRHSValue ^ Long.MinValue)
+        case Long_unsigned_<= => (longLHSValue ^ Long.MinValue) <= (longRHSValue ^ Long.MinValue)
+        case Long_unsigned_>  => (longLHSValue ^ Long.MinValue) > (longRHSValue ^ Long.MinValue)
+        case Long_unsigned_>= => (longLHSValue ^ Long.MinValue) >= (longRHSValue ^ Long.MinValue)
       }
     }
   }

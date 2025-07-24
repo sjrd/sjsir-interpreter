@@ -1,5 +1,7 @@
 import org.scalajs.linker.interface.ESVersion
 
+Global/resolvers += Resolver.sonatypeCentralSnapshots
+
 inThisBuild(Def.settings(
   organization := "be.doeraene",
   homepage := Some(url("https://github.com/sjrd/sjsir-interpreter")),
@@ -36,7 +38,7 @@ lazy val `sjsir-interpreter` = project
   .settings(
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.19.0",
+      "org.scala-js" %%% "scalajs-linker" % "1.20.0-SNAPSHOT",
       "org.scalameta" %%% "munit" % "0.7.29" % Test,
     ),
     scalaJSLinkerConfig ~= {
@@ -144,7 +146,7 @@ lazy val `scalajs-test-suite` = project
       import org.eclipse.jgit.api._
 
       val s = streams.value
-      val ver = scalaJSVersion
+      val ver = "837cdc0649bf8a2a72dfaf624de329e01c6c27b7" // scalaJSVersion
       val trgDir = (fetchScalaJSSource / artifactPath).value
 
       if (!trgDir.exists) {
@@ -164,7 +166,7 @@ lazy val `scalajs-test-suite` = project
       // something is wrong
       val git = Git.open(trgDir)
       s.log.info(s"Checking out Scala source version $ver")
-      git.checkout().setName(s"v$ver").call()
+      git.checkout().setName(s"$ver").call()
 
       trgDir
     },
