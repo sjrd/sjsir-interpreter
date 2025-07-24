@@ -16,6 +16,7 @@ final class Interpreter(val semantics: Semantics) {
   private var working: Boolean = false
 
   private val classInfos = mutable.Map.empty[ClassName, ClassInfo]
+  private val lambdaClassInfos = mutable.HashMap.empty[NewLambda.Descriptor, ClassInfo]
   private[core] val executor = new Executor(this)
   private[core] val compiler = new Compiler(this)
 
@@ -33,6 +34,17 @@ final class Interpreter(val semantics: Semantics) {
   private[core] def getClassInfo(className: ClassName)(implicit pos: Position): ClassInfo = {
     classInfos.getOrElse(className, {
       throw new AssertionError(s"Cannot find class ${className.nameString} at $pos")
+    })
+  }
+
+  private[core] def getLambdaClassInfo(descriptor: NewLambda.Descriptor)(
+      implicit pos: Position): ClassInfo = {
+    lambdaClassInfos.getOrElseUpdate(descriptor, {
+      val classDef = LambdaSynthesizer.makeClassDef(descriptor)
+      val className = classDef.className
+      val classInfo = new ClassInfo(this, className, classDef)
+      classInfos(className) = classInfo
+      classInfo
     })
   }
 

@@ -11,6 +11,7 @@ import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
+import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.linker.interface.unstable.RuntimeClassNameMapperImpl
 
@@ -177,6 +178,12 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     resolvedPublicMethods.getOrElseUpdate(methodName, {
       resolvePublicMethod(methodName)
     })
+  }
+
+  def lookupSingleConstructor()(implicit pos: Position): MethodInfo = {
+    val methods = directMethods(MemberNamespace.Constructor)
+    assert(methods.sizeIs == 1, s"Expected a single constructor in $className at $pos")
+    methods.head._2
   }
 
   def maybeLookupStaticConstructor(ctorName: MethodName): Option[MethodInfo] =
