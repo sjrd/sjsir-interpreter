@@ -20,9 +20,10 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
   import interpreter.getClassInfo
 
-  def compileBody(enclosingClassInfo: Option[ClassInfo], params: List[ParamDef],
-      body: Tree): Nodes.Body = {
-    val envBuilder = new EnvBuilder(enclosingClassInfo, Nil).addParams(params)
+  def compileBody(enclosingClassInfo: Option[ClassInfo], captureParams: List[ParamDef],
+      params: List[ParamDef], body: Tree): Nodes.Body = {
+    val envBuilder = new EnvBuilder(enclosingClassInfo, captureParams)
+      .addParams(params)
     val compiledBody = compile(body)(envBuilder)
     new n.Body(envBuilder.nextLocalIndex, compiledBody)
   }
@@ -114,6 +115,10 @@ private[core] final class Compiler(interpreter: Interpreter) {
           .toMap
         new n.Match(compile(selector), compiledCases, compile(default))
 
+      case JSAwait(arg) =>
+        throw new UnsupportedOperationException(
+            s"js.async/js.await is not supported by the interpreter at $pos")
+
       case Debugger() =>
         new n.Debugger()
 
@@ -154,6 +159,14 @@ private[core] final class Compiler(interpreter: Interpreter) {
         val namespace = MemberNamespace.forStaticCall(flags)
         val methodInfo = classInfo.lookupMethod(namespace, method.name)
         new n.ApplyStatic(methodInfo, compileList(args))
+
+      case ApplyTypedClosure(flags, fun, args) =>
+        new n.ApplyTypedClosure(compile(fun), compileList(args))
+
+      case NewLambda(descriptor, fun) =>
+        val classInfo = interpreter.getLambdaClassInfo(descriptor)
+        val methodInfo = classInfo.lookupSingleConstructor()
+        new n.New(classInfo, methodInfo, List(compile(fun)))
 
       case UnaryOp(op, lhs) =>
         new n.UnaryOp(op, compile(lhs))
@@ -293,8 +306,21 @@ private[core] final class Compiler(interpreter: Interpreter) {
           case LocalStorage.This           => new n.This()
         }
 
-      case Closure(arrow, captureParams, params, restParam, body, captureValues) =>
-        new n.Closure(arrow, compileJSBody(None, captureParams, params, restParam, body), captureValues.map(compile))
+      case Closure(flags, captureParams, params, restParam, resultType, body, captureValues) =>
+        if (flags.async) {
+          throw new UnsupportedOperationException(
+              s"js.async/js.await is not supported by the interpreter at $pos")
+        }
+
+        if (flags.typed) {
+          new n.TypedClosure(flags,
+              compileBody(None, captureParams, params, body),
+              captureValues.map(compile))
+        } else {
+          new n.Closure(flags,
+              compileJSBody(None, captureParams, params, restParam, body),
+              captureValues.map(compile))
+        }
 
       case CreateJSClass(className, captureValues) =>
         new n.CreateJSClass(getClassInfo(className), captureValues.map(compile))

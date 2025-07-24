@@ -11,6 +11,7 @@ import org.scalajs.ir.OriginalName.NoOriginalName
 import org.scalajs.ir.Trees._
 import org.scalajs.ir.Types._
 import org.scalajs.ir.Version
+import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.linker.interface.ModuleInitializer
 

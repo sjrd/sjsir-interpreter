@@ -12,8 +12,9 @@ import org.scalajs.ir.ClassKind
 import org.scalajs.ir.Names._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Trees
-import org.scalajs.ir.Trees.MemberNamespace
+import org.scalajs.ir.Trees.{ClosureFlags, MemberNamespace}
 import org.scalajs.ir.Types._
+import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.sjsirinterpreter.core.values._
 
@@ -23,8 +24,8 @@ private[core] object Nodes {
   private type JSClassPrivateFields = mutable.Map[FieldName, js.Any]
 
   final class Body(localCount: Int, tree: Node) {
-    def eval(receiver: Option[js.Any], args: List[js.Any]): js.Any = {
-      val env = new Env(Env.emptyCaptures, localCount)
+    def eval(captureEnv: Env.Captures, receiver: Option[js.Any], args: List[js.Any]): js.Any = {
+      val env = new Env(captureEnv, localCount)
 
       receiver.foreach(env.setThis(_))
 
@@ -460,6 +461,21 @@ private[core] object Nodes {
     }
   }
 
+  final class ApplyTypedClosure(fun: Node, args: List[Node])(
+      implicit executer: Executor, pos: Position)
+      extends Node {
+
+    override def eval()(implicit env: Env): js.Any = {
+      val efun = fun.eval()
+      if (efun == null) {
+        executor.throwVMException(NullPointerExceptionClass, s"null(...)")
+      } else {
+        val eargs = args.map(_.eval())
+        efun.asInstanceOf[Executor.TypedClosure].apply(eargs)
+      }
+    }
+  }
+
   final class UnaryOp(op: Trees.UnaryOp.Code, lhs: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
@@ -537,6 +553,9 @@ private[core] object Nodes {
               }
             case _: ArrayTypeRef =>
               executor.getClassOf(ClassRef(ObjectClass))
+            case _: TransientTypeRef =>
+              throw new AssertionError(
+                  s"Illegal transient type ref in class value: $classValue at $pos")
           }
           result
 
@@ -726,6 +745,9 @@ private[core] object Nodes {
             case typeRef: ArrayTypeRef =>
               val isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
               isInstanceFun(rhsValue)
+            case _: TransientTypeRef =>
+              throw new AssertionError(
+                  s"Illegal transient type ref in class value: $classLHSValue at $pos")
           }
           result
 
@@ -762,6 +784,9 @@ private[core] object Nodes {
               def isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
               if (!(rhsValue == null || isInstanceFun(rhsValue)))
                 castFail(s"$rhsValue is not an instance of ${executor.getClassName(typeRef)}")
+            case _: TransientTypeRef =>
+              throw new AssertionError(
+                  s"Illegal transient type ref in class value: $classLHSValue at $pos")
           }
 
           rhsValue
@@ -1161,17 +1186,28 @@ private[core] object Nodes {
       env.getThis
   }
 
-  final class Closure(arrow: Boolean, body: JSBody, captureValues: List[Node])(
+  final class Closure(flags: ClosureFlags, body: JSBody, captureValues: List[Node])(
       implicit executor: Executor, pos: Position)
       extends Node {
 
     override def eval()(implicit env: Env): js.Any = {
       import executor._
       val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[js.Any]
-      if (arrow)
+      if (flags.arrow)
         executor.createJSArrowFunction(stack.currentClassName, "<jscode>", captureEnv, body)
       else
         executor.createJSThisFunction(stack.currentClassName, "<jscode>", captureEnv, body)
+    }
+  }
+
+  final class TypedClosure(flags: ClosureFlags, body: Body, captureValues: List[Node])(
+      implicit executor: Executor, pos: Position)
+      extends Node {
+
+    override def eval()(implicit env: Env): js.Any = {
+      import executor._
+      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[js.Any]
+      executor.createTypedClosure(stack.currentClassName, "<jscode>", captureEnv, body)
     }
   }
 

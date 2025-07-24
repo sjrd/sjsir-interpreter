@@ -6,12 +6,13 @@ import scala.collection.mutable
 
 import scala.scalajs.js
 
-import org.scalajs.ir.Trees._
+import org.scalajs.ir.ClassKind._
 import org.scalajs.ir.Names._
-import org.scalajs.ir.Types._
 import org.scalajs.ir.Position
 import org.scalajs.ir.Position.NoPosition
-import org.scalajs.ir.ClassKind._
+import org.scalajs.ir.Trees._
+import org.scalajs.ir.Types._
+import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.linker.interface.ModuleInitializer
 
@@ -213,9 +214,10 @@ private[core] final class Executor(val interpreter: Interpreter) {
     stack.enter(pos, methodInfo) {
       val compiledBody = methodInfo.getCompiledBody {
         val methodDef = methodInfo.methodDef
-        interpreter.compiler.compileBody(Some(methodInfo.owner), methodDef.args, methodDef.body.get)
+        interpreter.compiler.compileBody(
+            Some(methodInfo.owner), Nil, methodDef.args, methodDef.body.get)
       }
-      compiledBody.eval(receiver, args)
+      compiledBody.eval(Env.emptyCaptures, receiver, args)
     }
   }
 
@@ -309,6 +311,15 @@ private[core] final class Executor(val interpreter: Interpreter) {
         body.eval(captureEnv, None, None, args.toList)
       }
     }: JSVarArgsFunction
+  }
+
+  def createTypedClosure(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.Body)(
+      implicit pos: Position): js.Any = {
+    ({ (args) =>
+      stack.enter(pos, className, methodName) {
+        body.eval(captureEnv, None, args)
+      }
+    }: TypedClosure).asInstanceOf[js.Any]
   }
 
   def loadModuleGeneric(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
@@ -412,7 +423,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
               false
           }
         }
-      case _:RecordType | AnyType | ClassType(_, true) | ArrayType(_, true) =>
+      case _:ClosureType | _:RecordType | AnyType | ClassType(_, true) | ArrayType(_, true) =>
         throw new AssertionError(s"Unexpected type for isInstanceOf: $tpe at $pos")
     }
   }
@@ -499,16 +510,24 @@ private[core] final class Executor(val interpreter: Interpreter) {
       case typeRef: PrimRef      => typeRef.displayName
       case ClassRef(className)   => getClassInfo(className).runtimeClassName
       case typeRef: ArrayTypeRef => genArrayName(typeRef)
+
+      case _: TransientTypeRef =>
+        throw new AssertionError(
+            s"Illegal transient type ref: $typeRef at $pos")
     }
   }
 
-  private def genArrayName(typeRef: TypeRef): String = typeRef match {
+  private def genArrayName(typeRef: TypeRef)(implicit pos: Position): String = typeRef match {
     case typeRef: PrimRef =>
       typeRef.charCode.toString
     case ClassRef(className) =>
       "L" + className.nameString + ";"
     case ArrayTypeRef(base, dimensions) =>
       "[" * dimensions + genArrayName(base)
+
+    case _: TransientTypeRef =>
+      throw new AssertionError(
+          s"Illegal transient type ref: $typeRef at $pos")
   }
 
   /* Generates JSClass value */
@@ -577,6 +596,10 @@ private[core] object Executor {
 
   trait JSVarArgsThisFunction extends js.ThisFunction {
     def apply(thiz: js.Any, args: js.Any*): js.Any
+  }
+
+  trait TypedClosure {
+    def apply(args: List[js.Any]): js.Any
   }
 
   def getJSGlobalRef(name: String): js.Any =
