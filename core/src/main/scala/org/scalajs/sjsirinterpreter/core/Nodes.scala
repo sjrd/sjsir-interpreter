@@ -272,8 +272,17 @@ private[core] object Nodes {
       js.special.tryCatch { () =>
         block.eval()
       } { e =>
-        env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
-        handler.eval()
+        if (e.isInstanceOf[LabelException]) {
+          /* LabelException is an implementation detail of the interpreter.
+           * It must never be caught be user code.
+           * This is not a problem for try..catch in JavaScript code, since a
+           * LabelException cannot cross method boundaries.
+           */
+          js.special.`throw`(e)
+        } else {
+          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
+          handler.eval()
+        }
       }
     }
   }
