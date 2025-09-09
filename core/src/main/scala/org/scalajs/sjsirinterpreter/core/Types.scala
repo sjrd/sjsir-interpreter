@@ -8,10 +8,10 @@ import org.scalajs.sjsirinterpreter.core.values._
 
 private[core] object Types {
 
-  def zeroOf(tpe: Type): js.Any = tpe match {
+  def zeroOf(tpe: Type): Value = tpe match {
     case BooleanType => false
-    case CharType    => '\u0000'.asInstanceOf[js.Any]
-    case LongType    => 0L.asInstanceOf[js.Any]
+    case CharType    => '\u0000'
+    case LongType    => 0L
     case ByteType | ShortType | IntType => 0
     case FloatType   => 0.0f
     case DoubleType  => 0.0
@@ -20,13 +20,13 @@ private[core] object Types {
     case _           => null
   }
 
-  def zeroOfRef(ref: NonArrayTypeRef): js.Any = ref match {
+  def zeroOfRef(ref: NonArrayTypeRef): Value = ref match {
     case BooleanRef => false
-    case CharRef    => '\u0000'.asInstanceOf[js.Any]
+    case CharRef    => '\u0000'
     case ByteRef    => 0
     case ShortRef   => 0
     case IntRef     => 0
-    case LongRef    => 0L.asInstanceOf[js.Any]
+    case LongRef    => 0L
     case FloatRef   => 0.0f
     case DoubleRef  => 0.0
     case _          => null
@@ -71,8 +71,4 @@ private[core] object Types {
     case double: Double => double
     case _ => throw new Error("Interpreter Error: Not a Double")
   }
-
-  def toAny(value: Char): js.Any = value.asInstanceOf[js.Any]
-
-  def toAny(value: Long): js.Any = value.asInstanceOf[js.Any]
 }

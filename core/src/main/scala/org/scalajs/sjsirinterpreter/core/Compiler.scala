@@ -12,7 +12,7 @@ import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core.{Nodes => n}
-import org.scalajs.sjsirinterpreter.core.Types.toAny
+import org.scalajs.sjsirinterpreter.core.values.Value
 
 private[core] final class Compiler(interpreter: Interpreter) {
   import Compiler._
@@ -104,7 +104,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.TryFinally(compile(block), compile(finalizer))
 
       case Match(selector, cases, default) =>
-        def compileMatchableLiteral(lit: MatchableLiteral): js.Any = {
+        def compileMatchableLiteral(lit: MatchableLiteral): Value = {
           lit match {
             case IntLiteral(value)    => value
             case StringLiteral(value) => value
@@ -267,7 +267,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Literal(value)
 
       case CharLiteral(value) =>
-        new n.Literal(toAny(value))
+        new n.Literal(value)
 
       case ByteLiteral(value) =>
         new n.Literal(value)
@@ -279,7 +279,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Literal(value)
 
       case LongLiteral(value) =>
-        new n.Literal(toAny(value))
+        new n.Literal(value)
 
       case FloatLiteral(value) =>
         new n.Literal(value)
@@ -343,7 +343,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
     }
   }
 
-  private def evalLinkTimeTree(tree: Tree): js.Any = {
+  private def evalLinkTimeTree(tree: Tree): Value = {
     tree match {
       case BooleanLiteral(value) => value
       case IntLiteral(value)     => value

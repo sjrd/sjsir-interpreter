@@ -13,17 +13,17 @@ import org.scalajs.sjsirinterpreter.core.Types
 
 private[core] final class ArrayInstance private (
   private[core] final val typeRef: ArrayTypeRef,
-  private[core] final val contents: Array[js.Any],
+  private[core] final val contents: Array[Value],
 ) extends js.Object {
   override def toString(): String = s"${typeRef.displayName}@${hashCode().toHexString}"
 }
 
 private[core] object ArrayInstance {
-  def fromList(typeRef: ArrayTypeRef, list: List[js.Any]): ArrayInstance =
+  def fromList(typeRef: ArrayTypeRef, list: List[Value]): ArrayInstance =
     new ArrayInstance(typeRef, list.toArray)
 
   def createWithLength(typeRef: ArrayTypeRef, length: Int): ArrayInstance = {
-    val resultContents = new Array[js.Any](length)
+    val resultContents = new Array[Value](length)
     val zero = if (typeRef.dimensions > 1) null else Types.zeroOfRef(typeRef.base)
     java.util.Arrays.fill(resultContents.asInstanceOf[Array[AnyRef]], zero)
     new ArrayInstance(typeRef, resultContents)

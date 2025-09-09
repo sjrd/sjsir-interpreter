@@ -17,7 +17,7 @@ private[core] trait Instance extends js.Object {
   val classInfo: ClassInfo
 
   @JSName(Instance.instanceFields)
-  val fields: Array[js.Any]
+  val fields: Array[Value]
 }
 
 private[core] object Instance {
