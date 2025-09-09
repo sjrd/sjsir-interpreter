@@ -19,15 +19,14 @@ import org.scalajs.ir.Types._
 import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.sjsirinterpreter.core.values._
-import org.scalajs.sjsirinterpreter.core.Types.toAny
 
 import Executor._
 
 private[core] object Nodes {
-  private type JSClassPrivateFields = mutable.Map[FieldName, js.Any]
+  private type JSClassPrivateFields = mutable.Map[FieldName, Value]
 
   final class Body(localCount: Int, tree: Node) {
-    def eval(captureEnv: Env.Captures, receiver: Option[js.Any], args: List[js.Any]): js.Any = {
+    def eval(captureEnv: Env.Captures, receiver: Option[Value], args: List[Value]): Value = {
       val env = new Env(captureEnv, localCount)
 
       receiver.foreach(env.setThis(_))
@@ -45,7 +44,7 @@ private[core] object Nodes {
   }
 
   final class JSBody(localCount: Int, paramCount: Int, hasRestParam: Boolean, tree: Node) {
-    def eval(captureEnv: Env.Captures, newTarget: Option[js.Any], thiz: Option[js.Any], args: List[js.Any]): js.Any = {
+    def eval(captureEnv: Env.Captures, newTarget: Option[Value], thiz: Option[Value], args: List[Value]): Value = {
       val env = new Env(captureEnv, localCount)
 
       newTarget.foreach(env.setNewTarget(_))
@@ -84,19 +83,19 @@ private[core] object Nodes {
     superConstructorArgs: List[NodeOrJSSpread],
     afterSuperConstructor: List[Node],
   )(implicit executor: Executor) {
-    def eval(superClassValue: js.Any, captureEnv: Env.Captures): js.Dynamic = {
-      val parents = js.Dynamic.literal(ParentClass = superClassValue).asInstanceOf[RawParents]
+    def eval(superClassValue: Value, captureEnv: Env.Captures): js.Dynamic = {
+      val parents = js.Dynamic.literal(ParentClass = superClassValue.asInstanceOf[js.Any]).asInstanceOf[RawParents]
 
       class Subclass(preSuperEnv: Env) extends parents.ParentClass(toScalaVarArgs(evalSuperArgs(preSuperEnv)): _*) {
-        def this(newTarget: js.Any, args: Seq[js.Any]) = this(evalBeforeSuper(captureEnv, newTarget, args))
-        def this(args: js.Any*) = this(js.`new`.target, args)
+        def this(newTarget: Value, args: Seq[Value]) = this(evalBeforeSuper(captureEnv, newTarget, args))
+        def this(args: Value*) = this(js.`new`.target, args)
         evalAfterSuper(preSuperEnv, this)
       }
 
       js.constructorOf[Subclass]
     }
 
-    private def evalBeforeSuper(captureEnv: Env.Captures, newTarget: js.Any, args: Seq[js.Any]): Env = {
+    private def evalBeforeSuper(captureEnv: Env.Captures, newTarget: Value, args: Seq[Value]): Env = {
       val env = new Env(captureEnv, localCount)
 
       env.setNewTarget(newTarget)
@@ -127,10 +126,10 @@ private[core] object Nodes {
       env
     }
 
-    private def evalSuperArgs(env: Env): js.Array[js.Any] =
-      evalJSArgList(superConstructorArgs)(env)
+    private def evalSuperArgs(env: Env): js.Array[Value] =
+      evalJSArgList(superConstructorArgs)(env).asInstanceOf[js.Array[Value]]
 
-    private def evalAfterSuper(env: Env, thiz: js.Any): Unit = {
+    private def evalAfterSuper(env: Env, thiz: Value): Unit = {
       env.setThis(thiz)
       attachFields(thiz, env.captureEnv)
 
@@ -138,15 +137,15 @@ private[core] object Nodes {
         stat.eval()(env)
     }
 
-    private def attachFields(target: js.Any, captureEnv: Env.Captures): Unit = {
+    private def attachFields(target: Value, captureEnv: Env.Captures): Unit = {
       implicit val pos = classInfo.classDef.pos
 
       if (classInfo.instanceFieldDefs.nonEmpty) {
         val existing = target.asInstanceOf[RawJSValue].jsPropertyGet(executor.fieldsSymbol)
         val fields = if (js.isUndefined(existing)) {
           val fields: JSClassPrivateFields = mutable.Map.empty
-          val descriptor = Descriptor.make(false, false, false, fields.asInstanceOf[js.Any])
-          js.Dynamic.global.Object.defineProperty(target, executor.fieldsSymbol, descriptor)
+          val descriptor = Descriptor.make(false, false, false, fields)
+          js.Dynamic.global.Object.defineProperty(target.asInstanceOf[js.Any], executor.fieldsSymbol, descriptor)
           fields
         } else {
           existing.asInstanceOf[JSClassPrivateFields]
@@ -164,21 +163,21 @@ private[core] object Nodes {
   }
 
   sealed abstract class NodeOrJSSpread {
-    def evalToArgsArray(dest: js.Array[js.Any])(implicit env: Env): Unit
+    def evalToArgsArray(dest: js.Array[Value])(implicit env: Env): Unit
   }
 
   sealed abstract class Node(implicit val executor: Executor, val pos: Position) extends NodeOrJSSpread {
-    final def evalToArgsArray(dest: js.Array[js.Any])(implicit env: Env): Unit =
+    final def evalToArgsArray(dest: js.Array[Value])(implicit env: Env): Unit =
       dest.push(eval())
 
-    def eval()(implicit env: Env): js.Any
+    def eval()(implicit env: Env): Value
   }
 
   private def evalJSArgList(args: List[NodeOrJSSpread])(implicit env: Env): js.Array[js.Any] = {
-    val result = js.Array[js.Any]()
+    val result = js.Array[Value]()
     for (arg <- args)
       arg.evalToArgsArray(result)
-    result
+    result.asInstanceOf[js.Array[js.Any]]
   }
 
   // Control flow constructs
@@ -187,7 +186,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       ()
   }
 
@@ -195,8 +194,8 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
-      var lastValue: js.Any = ()
+    override def eval()(implicit env: Env): Value = {
+      var lastValue: Value = ()
       for (stat <- stats)
         lastValue = stat.eval()
       lastValue
@@ -207,7 +206,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       try {
         body.eval()
       } catch {
@@ -218,14 +217,14 @@ private[core] object Nodes {
   }
 
   sealed trait AssignLhs extends Node {
-    def evalAssign(value: js.Any)(implicit env: Env): Unit
+    def evalAssign(value: Value)(implicit env: Env): Unit
   }
 
   final class Assign(lhs: AssignLhs, rhs: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       lhs.evalAssign(rhs.eval())
   }
 
@@ -233,7 +232,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       throw new LabelException(label, expr.eval())
   }
 
@@ -241,7 +240,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       if (Types.asBoolean(cond.eval())) thenp.eval() else elsep.eval()
   }
 
@@ -249,7 +248,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       while (Types.asBoolean(cond.eval()))
         body.eval()
     }
@@ -259,9 +258,9 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       js.special.forin(obj.eval()) { key =>
-        env.setLocal(keyVarIndex, key.asInstanceOf[js.Any])
+        env.setLocal(keyVarIndex, key)
         body.eval()
       }
     }
@@ -271,7 +270,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       js.special.tryCatch { () =>
         block.eval()
       } { e =>
@@ -283,7 +282,7 @@ private[core] object Nodes {
            */
           js.special.`throw`(e)
         } else {
-          env.setLocal(errVarIndex, e.asInstanceOf[js.Any])
+          env.setLocal(errVarIndex, e)
           handler.eval()
         }
       }
@@ -294,7 +293,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       try {
         block.eval()
       } finally {
@@ -303,11 +302,11 @@ private[core] object Nodes {
     }
   }
 
-  final class Match(selector: Node, cases: Map[js.Any, Node], default: Node)(
+  final class Match(selector: Node, cases: Map[Value, Node], default: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val selectorValue = selector.eval()
       val selectedBody = cases.getOrElse(selectorValue, default)
       selectedBody.eval()
@@ -318,7 +317,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       () // could be js.special.debugger(), but I'm afraid of program-wide performance cliffs
   }
 
@@ -328,7 +327,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val eargs = args.map(_.eval())
       executor.newInstanceWithConstructor(classInfo, ctor, eargs)
     }
@@ -338,7 +337,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       executor.loadModule(classInfo)
   }
 
@@ -346,7 +345,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       classInfo.storeModuleClassInstance(env.getThis)
     }
   }
@@ -355,7 +354,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       qualifier.eval() match {
         case Instance(instance) =>
           instance.fields(fieldIndex)
@@ -367,7 +366,7 @@ private[core] object Nodes {
       }
     }
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
+    override def evalAssign(value: Value)(implicit env: Env): Unit = {
       qualifier.eval() match {
         case Instance(instance) =>
           instance.fields(fieldIndex) = value
@@ -384,10 +383,10 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       classInfo.getStaticField(field)
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit =
+    override def evalAssign(value: Value)(implicit env: Env): Unit =
       classInfo.setStaticField(field, value)
   }
 
@@ -395,7 +394,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val memberDef = classInfo.lookupJSNativeMember(member)
       executor.loadJSNativeLoadSpec(memberDef.jsNativeLoadSpec)
     }
@@ -409,7 +408,7 @@ private[core] object Nodes {
     private val isToString = method == toStringMethodName
     private val isNumberCompareToMethod = numberCompareToMethodNames.contains(method)
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val instance = receiver.eval()
       if (instance == null) {
         executor.throwVMException(NullPointerExceptionClass, s"null.${method.displayName}")
@@ -455,7 +454,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val instance = receiver.eval()
       val eargs = args.map(_.eval())
       executor.applyMethodDefGeneric(methodInfo, Some(instance), eargs)
@@ -467,7 +466,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val eargs = args.map(_.eval())
       executor.applyMethodDefGeneric(methodInfo, None, eargs)
     }
@@ -477,7 +476,7 @@ private[core] object Nodes {
       implicit executer: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val efun = fun.eval()
       if (efun == null) {
         executor.throwVMException(NullPointerExceptionClass, s"null(...)")
@@ -492,7 +491,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import Trees.UnaryOp._
       import executor.interpreter.getClassInfo
 
@@ -510,15 +509,15 @@ private[core] object Nodes {
       (op: @switch) match {
         case Boolean_!     => !booleanValue
         case CharToInt     => charValue.toInt
-        case IntToLong     => toAny(intValue.toLong)
-        case IntToChar     => toAny(intValue.toChar)
+        case IntToLong     => intValue.toLong
+        case IntToChar     => intValue.toChar
         case IntToByte     => intValue.toByte
         case IntToShort    => intValue.toShort
         case LongToInt     => longValue.toInt
         case DoubleToInt   => doubleValue.toInt
         case DoubleToFloat => doubleValue.toFloat
         case LongToDouble  => longValue.toDouble
-        case DoubleToLong  => toAny(doubleValue.toLong)
+        case DoubleToLong  => doubleValue.toLong
         case LongToFloat   => longValue.toFloat
         case String_length => stringValue.length
 
@@ -639,7 +638,7 @@ private[core] object Nodes {
         case Float_fromBits =>
           JFloat.intBitsToFloat(intValue)
         case Double_toBits =>
-          toAny(JDouble.doubleToRawLongBits(doubleValue))
+          JDouble.doubleToRawLongBits(doubleValue)
         case Double_fromBits =>
           JDouble.longBitsToDouble(longValue)
         case Int_clz =>
@@ -647,7 +646,7 @@ private[core] object Nodes {
         case Long_clz =>
           JLong.numberOfLeadingZeros(longValue)
         case UnsignedIntToLong =>
-          toAny(Integer.toUnsignedLong(intValue))
+          Integer.toUnsignedLong(intValue)
       }
     }
   }
@@ -656,7 +655,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import org.scalajs.ir.Trees.BinaryOp._
       import executor.interpreter.getClassInfo
 
@@ -691,8 +690,8 @@ private[core] object Nodes {
       }
 
       (op: @switch) match {
-        case === => lhsValue eq rhsValue
-        case !== => lhsValue ne rhsValue
+        case === => lhsValue.asInstanceOf[AnyRef] eq rhsValue.asInstanceOf[AnyRef]
+        case !== => lhsValue.asInstanceOf[AnyRef] ne rhsValue.asInstanceOf[AnyRef]
 
         case String_+ => "" + lhsValue + rhsValue
 
@@ -721,18 +720,18 @@ private[core] object Nodes {
         case Int_>  => intLHSValue > intRHSValue
         case Int_>= => intLHSValue >= intRHSValue
 
-        case Long_+ => toAny(longLHSValue + longRHSValue)
-        case Long_- => toAny(longLHSValue - longRHSValue)
-        case Long_* => toAny(longLHSValue * longRHSValue)
-        case Long_/ => toAny(longLHSValue / checkLongDivByZero(longRHSValue))
-        case Long_% => toAny(longLHSValue % checkLongDivByZero(longRHSValue))
+        case Long_+ => longLHSValue + longRHSValue
+        case Long_- => longLHSValue - longRHSValue
+        case Long_* => longLHSValue * longRHSValue
+        case Long_/ => longLHSValue / checkLongDivByZero(longRHSValue)
+        case Long_% => longLHSValue % checkLongDivByZero(longRHSValue)
 
-        case Long_|   => toAny(longLHSValue | longRHSValue)
-        case Long_&   => toAny(longLHSValue & longRHSValue)
-        case Long_^   => toAny(longLHSValue ^ longRHSValue)
-        case Long_<<  => toAny(longLHSValue << intRHSValue)
-        case Long_>>> => toAny(longLHSValue >>> intRHSValue)
-        case Long_>>  => toAny(longLHSValue >> intRHSValue)
+        case Long_|   => longLHSValue | longRHSValue
+        case Long_&   => longLHSValue & longRHSValue
+        case Long_^   => longLHSValue ^ longRHSValue
+        case Long_<<  => longLHSValue << intRHSValue
+        case Long_>>> => longLHSValue >>> intRHSValue
+        case Long_>>  => longLHSValue >> intRHSValue
 
         case Long_== => longLHSValue == longRHSValue
         case Long_!= => longLHSValue != longRHSValue
@@ -760,7 +759,7 @@ private[core] object Nodes {
         case Double_>  => doubleLHSValue > doubleRHSValue
         case Double_>= => doubleLHSValue >= doubleRHSValue
 
-        case String_charAt => toAny(stringLHSValue.charAt(intRHSValue))
+        case String_charAt => stringLHSValue.charAt(intRHSValue)
 
         case Class_isInstance =>
           val result: Boolean = classLHSValue match {
@@ -829,9 +828,9 @@ private[core] object Nodes {
         case Int_unsigned_% =>
           Integer.remainderUnsigned(intLHSValue, checkIntDivByZero(intRHSValue))
         case Long_unsigned_/ =>
-          toAny(JLong.divideUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+          JLong.divideUnsigned(longLHSValue, checkLongDivByZero(longRHSValue))
         case Long_unsigned_% =>
-          toAny(JLong.remainderUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+          JLong.remainderUnsigned(longLHSValue, checkLongDivByZero(longRHSValue))
 
         case Int_unsigned_<  => (intLHSValue ^ Int.MinValue) < (intRHSValue ^ Int.MinValue)
         case Int_unsigned_<= => (intLHSValue ^ Int.MinValue) <= (intRHSValue ^ Int.MinValue)
@@ -850,7 +849,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       ArrayInstance.createWithLength(typeRef, Types.asInt(length.eval()))
   }
 
@@ -858,7 +857,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       ArrayInstance.fromList(typeRef, elems.map(_.eval()))
   }
 
@@ -866,32 +865,32 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val instance = array.eval().asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
       instance.contents(i)
     }
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
+    override def evalAssign(value: Value)(implicit env: Env): Unit = {
       val instance = array.eval().asInstanceOf[ArrayInstance]
       val i = Types.asInt(index.eval())
       instance.contents(i) = value
     }
   }
 
-  final class IsInstanceOf(expr: Node, isInstanceFun: js.Any => Boolean)(
+  final class IsInstanceOf(expr: Node, isInstanceFun: Value => Boolean)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       isInstanceFun(expr.eval())
   }
 
-  final class AsInstanceOf(expr: Node, tpe: Type, isInstanceFun: js.Any => Boolean, nullValue: js.Any)(
+  final class AsInstanceOf(expr: Node, tpe: Type, isInstanceFun: Value => Boolean, nullValue: Value)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val value = expr.eval()
       if (value == null)
         nullValue
@@ -908,7 +907,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val ctorValue = ctor.eval().asInstanceOf[js.Dynamic]
       val eargs = evalJSArgList(args)
       executor.stack.enterJSCode(pos) {
@@ -921,7 +920,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
       fields.getOrElse(field, {
@@ -930,7 +929,7 @@ private[core] object Nodes {
       })
     }
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
+    override def evalAssign(value: Value)(implicit env: Env): Unit = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val fields = obj.jsPropertyGet(executor.fieldsSymbol).asInstanceOf[JSClassPrivateFields]
       fields(field) = value
@@ -941,13 +940,13 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val prop = item.eval()
       obj.jsPropertyGet(prop)
     }
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
+    override def evalAssign(value: Value)(implicit env: Env): Unit = {
       val obj = qualifier.eval().asInstanceOf[RawJSValue]
       val prop = item.eval()
       obj.jsPropertySet(prop, value)
@@ -958,7 +957,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val efun = fun.eval().asInstanceOf[js.Function]
       val eargs = evalJSArgList(args)
       executor.stack.enterJSCode(pos) {
@@ -971,7 +970,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val obj = receiver.eval().asInstanceOf[RawJSValue]
       val meth = method.eval()
       val eargs = evalJSArgList(args)
@@ -985,7 +984,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val clazz = superClass.eval().asInstanceOf[js.Dynamic]
       val propName = item.eval()
       val propDesc = Descriptor.resolve(clazz, propName).getOrElse {
@@ -993,12 +992,12 @@ private[core] object Nodes {
             new js.TypeError(s"Cannot resolve super property $propName on $clazz at $pos"))
       }
       if (propDesc.get.isDefined)
-        propDesc.get.get.call(receiver.eval())
+        propDesc.get.get.call(receiver.eval().asInstanceOf[js.Any])
       else
-        propDesc.value.asInstanceOf[js.Any]
+        propDesc.value
     }
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit = {
+    override def evalAssign(value: Value)(implicit env: Env): Unit = {
       val clazz = superClass.eval().asInstanceOf[js.Dynamic]
       val propName = item.eval()
       val propDesc = Descriptor.resolve(clazz, propName).getOrElse {
@@ -1006,7 +1005,7 @@ private[core] object Nodes {
             new js.TypeError(s"Cannot resolve super property $propName on $clazz at $pos"))
       }
       if (propDesc.set.isDefined)
-        propDesc.set.get.call(receiver.eval(), value)
+        propDesc.set.get.call(receiver.eval().asInstanceOf[js.Any], value.asInstanceOf[js.Any])
       else
         propDesc.value = value
     }
@@ -1016,14 +1015,14 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val eclass = superClass.eval().asInstanceOf[js.Dynamic]
       val meth = method.eval()
       val methodFun = eclass.prototype.asInstanceOf[RawJSValue].jsPropertyGet(meth)
       val obj = receiver.eval()
       val eargs = evalJSArgList(args)
       executor.stack.enterJSCode(pos) {
-        methodFun.asInstanceOf[js.Function].call(obj, toScalaVarArgs(eargs): _*)
+        methodFun.asInstanceOf[js.Function].call(obj.asInstanceOf[js.Any], toScalaVarArgs(eargs): _*)
       }
     }
   }
@@ -1032,7 +1031,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       env.getNewTarget
   }
 
@@ -1040,7 +1039,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       executor.loadJSConstructor(classInfo)
   }
 
@@ -1048,7 +1047,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       executor.loadJSModule(classInfo)
   }
 
@@ -1056,15 +1055,15 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends NodeOrJSSpread {
 
-    override def evalToArgsArray(dest: js.Array[js.Any])(implicit env: Env): Unit =
-      dest ++= items.eval().asInstanceOf[js.Array[js.Any]]
+    override def evalToArgsArray(dest: js.Array[Value])(implicit env: Env): Unit =
+      dest ++= items.eval().asInstanceOf[js.Array[Value]]
   }
 
   final class JSDelete(qualifier: Node, item: Node)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       js.special.delete(qualifier.eval(), item.eval())
   }
 
@@ -1072,7 +1071,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import Trees.JSUnaryOp._
 
       val value = lhs.eval()
@@ -1094,7 +1093,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import Trees.JSBinaryOp._
 
       @inline def lhsValue = lhs.eval().asInstanceOf[js.Dynamic]
@@ -1137,7 +1136,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       evalJSArgList(items)
   }
 
@@ -1145,7 +1144,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       val result = new js.Object().asInstanceOf[RawJSValue]
       for (field <- fields)
         result.jsPropertySet(field._1.eval(), field._2.eval())
@@ -1157,17 +1156,17 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    private val getter: js.Function0[js.Any] =
-      new js.Function(s"return $name").asInstanceOf[js.Function0[js.Any]]
+    private val getter: js.Function0[Value] =
+      new js.Function(s"return $name").asInstanceOf[js.Function0[Value]]
 
-    private val setter: js.Function1[js.Any, Unit] =
-      if (name == "value") new js.Function("x", s"$name = x").asInstanceOf[js.Function1[js.Any, Unit]]
-      else new js.Function("value", s"$name = value").asInstanceOf[js.Function1[js.Any, Unit]]
+    private val setter: js.Function1[Value, Unit] =
+      if (name == "value") new js.Function("x", s"$name = x").asInstanceOf[js.Function1[Value, Unit]]
+      else new js.Function("value", s"$name = value").asInstanceOf[js.Function1[Value, Unit]]
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       getter()
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit =
+    override def evalAssign(value: Value)(implicit env: Env): Unit =
       setter(value)
   }
 
@@ -1175,20 +1174,20 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    private val getter: js.Function0[js.Any] =
-      new js.Function(s"return typeof $name").asInstanceOf[js.Function0[js.Any]]
+    private val getter: js.Function0[Value] =
+      new js.Function(s"return typeof $name").asInstanceOf[js.Function0[Value]]
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       getter()
   }
 
   // Literals
 
-  final class Literal(value: js.Any)(
+  final class Literal(value: Value)(
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       value
   }
 
@@ -1196,7 +1195,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       executor.getClassOf(typeRef)
   }
 
@@ -1206,10 +1205,10 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       env.getCapture(index)
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit =
+    override def evalAssign(value: Value)(implicit env: Env): Unit =
       throw new AssertionError(s"Cannot assign to capture ref $index at $pos")
   }
 
@@ -1217,10 +1216,10 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends AssignLhs {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       env.getLocal(index)
 
-    override def evalAssign(value: js.Any)(implicit env: Env): Unit =
+    override def evalAssign(value: Value)(implicit env: Env): Unit =
       env.setLocal(index, value)
   }
 
@@ -1228,7 +1227,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       env.getThis
   }
 
@@ -1236,9 +1235,9 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import executor._
-      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[js.Any]
+      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[Value]
       if (flags.arrow)
         executor.createJSArrowFunction(stack.currentClassName, "<jscode>", captureEnv, body)
       else
@@ -1250,9 +1249,9 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any = {
+    override def eval()(implicit env: Env): Value = {
       import executor._
-      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[js.Any]
+      val captureEnv: Env.Captures = captureValues.map(_.eval()).toArray[Value]
       executor.createTypedClosure(stack.currentClassName, "<jscode>", captureEnv, body)
     }
   }
@@ -1261,7 +1260,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends Node {
 
-    override def eval()(implicit env: Env): js.Any =
+    override def eval()(implicit env: Env): Value =
       executor.createJSClass(classInfo, captureValues.map(_.eval()))
   }
 
@@ -1270,8 +1269,8 @@ private[core] object Nodes {
   final class JSClassDef(classInfo: ClassInfo, superClass: JSBody, constructorBody: JSConstructorBody)(
       implicit val executor: Executor, val pos: Position) {
 
-    def createClass(classCaptureValues: List[js.Any]): js.Dynamic = {
-      val captureEnv = classCaptureValues.toArray[js.Any]
+    def createClass(classCaptureValues: List[Value]): js.Dynamic = {
+      val captureEnv = classCaptureValues.toArray[Value]
 
       val superClassValue = superClass.eval(captureEnv, None, None, Nil)
       val ctor = constructorBody.eval(superClassValue, captureEnv)
@@ -1291,14 +1290,14 @@ private[core] object Nodes {
   sealed abstract class JSMemberDef()(
       implicit val executor: Executor, val pos: Position) {
 
-    def createOn(target: js.Any, captureEnv: Env.Captures): Unit
+    def createOn(target: Value, captureEnv: Env.Captures): Unit
   }
 
-  final class JSFieldDef(name: JSBody, initialValue: js.Any)(
+  final class JSFieldDef(name: JSBody, initialValue: Value)(
       implicit executor: Executor, pos: Position)
       extends JSMemberDef {
 
-    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+    def createOn(target: Value, captureEnv: Env.Captures): Unit = {
       val fieldName = name.eval(captureEnv, None, None, Nil)
       val descriptor = new js.PropertyDescriptor {
         configurable = true
@@ -1306,7 +1305,7 @@ private[core] object Nodes {
         writable = true
         value = initialValue
       }
-      js.Dynamic.global.Object.defineProperty(target, fieldName, descriptor)
+      js.Dynamic.global.Object.defineProperty(target.asInstanceOf[js.Any], fieldName.asInstanceOf[js.Any], descriptor)
     }
   }
 
@@ -1319,7 +1318,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends JSMethodOrPropertyDef {
 
-    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+    def createOn(target: Value, captureEnv: Env.Captures): Unit = {
       val methodName = name.eval(captureEnv, None, None, Nil)
       val methodBody = executor.createJSThisFunction(
           owner.classNameString, methodName.toString(), captureEnv, body)
@@ -1332,7 +1331,7 @@ private[core] object Nodes {
       implicit executor: Executor, pos: Position)
       extends JSMethodOrPropertyDef {
 
-    def createOn(target: js.Any, captureEnv: Env.Captures): Unit = {
+    def createOn(target: Value, captureEnv: Env.Captures): Unit = {
       val propName = name.eval(captureEnv, None, None, Nil)
       val classNameString = owner.classNameString
       val propNameString = propName.toString()
@@ -1353,7 +1352,7 @@ private[core] object Nodes {
         get = getterFun
         set = setterFun
       }
-      js.Dynamic.global.Object.defineProperty(target, propName, descriptor)
+      js.Dynamic.global.Object.defineProperty(target.asInstanceOf[js.Any], propName.asInstanceOf[js.Any], descriptor)
     }
   }
 }

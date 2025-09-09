@@ -11,7 +11,7 @@ import org.scalajs.ir.Names.LabelName
   * @param label - label to identify the owner of returning value
   * @param value - the value to be returned from the labeled block
   */
-private[core] final class LabelException(val label: LabelName, val value: js.Any)
+private[core] final class LabelException(val label: LabelName, val value: Value)
     extends Exception {
 
   override def getMessage(): String =

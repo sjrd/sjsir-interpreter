@@ -15,6 +15,8 @@ import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.linker.interface.unstable.RuntimeClassNameMapperImpl
 
+import org.scalajs.sjsirinterpreter.core.values.Value
+
 private[core] final class ClassInfo(val interpreter: Interpreter,
     val className: ClassName, val classDef: ClassDef) {
 
@@ -80,8 +82,8 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     callback(this)
   }
 
-  private var _staticFields: mutable.Map[FieldName, js.Any] = null
-  def staticFields: mutable.Map[FieldName, js.Any] = {
+  private var _staticFields: mutable.Map[FieldName, Value] = null
+  def staticFields: mutable.Map[FieldName, Value] = {
     if (_staticFields == null) {
       _staticFields = mutable.Map.empty
       classDef.fields.foreach {
@@ -113,11 +115,12 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     _totalFieldCount
   }
 
-  private var _fieldsTemplate: Array[js.Any] = null
-  def fieldsTemplate(implicit pos: Position): Array[js.Any] = {
+  private var _fieldsTemplate: Array[Value] = null
+  def fieldsTemplate(implicit pos: Position): Array[Value] = {
     if (_fieldsTemplate == null) {
-      val superTemplate = superClass.fold(new Array[js.Any](0))(_.fieldsTemplate)
-      val template = java.util.Arrays.copyOf(superTemplate, totalFieldCount)
+      val superTemplate = superClass.fold(new Array[Value](0))(_.fieldsTemplate)
+      val template =
+        java.util.Arrays.copyOf(superTemplate.asInstanceOf[Array[AnyRef]], totalFieldCount).asInstanceOf[Array[Value]]
       var nextIndex = superTemplate.length
       for (fieldDef <- instanceFieldDefs) {
         template(nextIndex) = Types.zeroOf(fieldDef.ftpe)
@@ -419,14 +422,14 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     jsClass
   }
 
-  private var moduleClassInstance: js.Any = null
-  def getModuleClassInstance(init: => js.Any): js.Any = {
+  private var moduleClassInstance: Value = null
+  def getModuleClassInstance(init: => Value): Value = {
     if (moduleClassInstance == null)
       moduleClassInstance = init
     moduleClassInstance
   }
 
-  def storeModuleClassInstance(instance: js.Any): Unit =
+  def storeModuleClassInstance(instance: Value): Unit =
     moduleClassInstance = instance
 
   private var isInstanceFun: (Any => Boolean) = null
@@ -436,7 +439,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
     isInstanceFun
   }
 
-  def getStaticField(fieldName: FieldName)(implicit pos: Position): js.Any = {
+  def getStaticField(fieldName: FieldName)(implicit pos: Position): Value = {
     staticFields.getOrElse(fieldName, {
       throw new AssertionError(s"Static field ${fieldName.nameString} on $classNameString not found at $pos")
     })
@@ -445,7 +448,7 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   def registerStaticFieldMirror(fieldName: FieldName, mirror: String): Unit =
     staticFieldMirrors(fieldName) = mirror :: staticFieldMirrors.getOrElse(fieldName, Nil)
 
-  def setStaticField(fieldName: FieldName, value: js.Any)(implicit pos: Position): Unit = {
+  def setStaticField(fieldName: FieldName, value: Value)(implicit pos: Position): Unit = {
     assert(staticFields.contains(fieldName),
         s"Static field ${fieldName.nameString} on $classNameString not found (for assignment)")
     staticFields.update(fieldName, value)

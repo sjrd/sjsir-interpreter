@@ -192,7 +192,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
           stack.enter(pos, className, "<module-initializer>") {
             val classInfo = getClassInfo(className)
             val methodInfo = classInfo.lookupMethod(MemberNamespace.PublicStatic, methodName)
-            val argArray = ArrayInstance.fromList(arrayOfStringTypeRef, args.map(s => s: js.Any))
+            val argArray = ArrayInstance.fromList(arrayOfStringTypeRef, args)
             applyMethodDefGeneric(methodInfo, None, List(argArray))
           }
         case VoidMainMethod(className, methodName) =>
@@ -205,8 +205,8 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def applyMethodDefGeneric(methodInfo: MethodInfo, receiver: Option[js.Any], args: List[js.Any])(
-      implicit pos: Position): js.Any = {
+  def applyMethodDefGeneric(methodInfo: MethodInfo, receiver: Option[Value], args: List[Value])(
+      implicit pos: Position): Value = {
 
     if (methodInfo.isTheFillInStackTraceMethodName)
       performFillInStackTrace(receiver)
@@ -221,11 +221,11 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  private def performFillInStackTrace(receiver: Option[js.Any])(implicit pos: Position): Unit = {
+  private def performFillInStackTrace(receiver: Option[Value])(implicit pos: Position): Unit = {
     val th = receiver.get
     val stackTrace = stack.captureStackTrace(pos)
     val stackTraceElements = stackTrace.map { e =>
-      val args: List[js.Any] = List(
+      val args: List[Value] = List(
         if (e.className == null) "<jscode>" else e.className,
         if (e.methodName == null) "<jscode>" else e.methodName,
         if (e.pos.isEmpty) null else e.pos.source.toASCIIString(),
@@ -254,10 +254,10 @@ private[core] final class Executor(val interpreter: Interpreter) {
     instance
   }
 
-  def newInstanceWithConstructor(ctor: MethodInfo, args: List[js.Any])(implicit pos: Position): Instance =
+  def newInstanceWithConstructor(ctor: MethodInfo, args: List[Value])(implicit pos: Position): Instance =
     newInstanceWithConstructor(ctor.owner, ctor, args)
 
-  def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodInfo, args: List[js.Any])(
+  def newInstanceWithConstructor(classInfo: ClassInfo, ctor: MethodInfo, args: List[Value])(
       implicit pos: Position): Instance = {
     val instance = createNewInstance(classInfo)
     applyMethodDefGeneric(ctor, Some(instance), args)
@@ -271,13 +271,13 @@ private[core] final class Executor(val interpreter: Interpreter) {
     js.special.`throw`(ex)
   }
 
-  def bindArgs(args: List[ParamDef], values: List[js.Any]): Map[LocalName, js.Any] = {
+  def bindArgs(args: List[ParamDef], values: List[Value]): Map[LocalName, Value] = {
     assert(args.size == values.size, "argument and values list sizes don't match")
     args.map(_.name.name).zip(values).toMap
   }
 
-  def bindJSArgs(params: List[ParamDef], restParam: Option[ParamDef], values: Seq[js.Any]): Map[LocalName, js.Any] = {
-    def expandWithUndefined(n: Int, values: Seq[js.Any]): Seq[js.Any] =
+  def bindJSArgs(params: List[ParamDef], restParam: Option[ParamDef], values: Seq[Value]): Map[LocalName, Value] = {
+    def expandWithUndefined(n: Int, values: Seq[Value]): Seq[Value] =
       if (values.sizeIs >= n) values
       else values ++ List.fill(n - values.size)(js.undefined)
 
@@ -296,7 +296,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
   }
 
   def createJSThisFunction(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.JSBody)(
-      implicit pos: Position): js.Any = {
+      implicit pos: Position): Value = {
     { (thiz, args) =>
       stack.enter(pos, className, methodName) {
         body.eval(captureEnv, None, Some(thiz), args.toList)
@@ -305,7 +305,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
   }
 
   def createJSArrowFunction(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.JSBody)(
-      implicit pos: Position): js.Any = {
+      implicit pos: Position): Value = {
     { (args) =>
       stack.enter(pos, className, methodName) {
         body.eval(captureEnv, None, None, args.toList)
@@ -314,22 +314,22 @@ private[core] final class Executor(val interpreter: Interpreter) {
   }
 
   def createTypedClosure(className: String, methodName: String, captureEnv: Env.Captures, body: Nodes.Body)(
-      implicit pos: Position): js.Any = {
+      implicit pos: Position): Value = {
     ({ (args) =>
       stack.enter(pos, className, methodName) {
         body.eval(captureEnv, None, args)
       }
-    }: TypedClosure).asInstanceOf[js.Any]
+    }: TypedClosure)
   }
 
-  def loadModuleGeneric(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+  def loadModuleGeneric(classInfo: ClassInfo)(implicit pos: Position): Value = {
     classInfo.kind match {
       case ModuleClass => loadModule(classInfo)
       case _           => loadJSModule(classInfo)
     }
   }
 
-  def loadModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+  def loadModule(classInfo: ClassInfo)(implicit pos: Position): Value = {
     classInfo.getModuleClassInstance {
       stack.enter(pos, classInfo.classNameString, "<clinit>") {
         val ctorInfo = classInfo.lookupMethod(MemberNamespace.Constructor, NoArgConstructorName)
@@ -338,7 +338,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def loadJSModule(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+  def loadJSModule(classInfo: ClassInfo)(implicit pos: Position): Value = {
     classInfo.kind match {
       case NativeJSModuleClass =>
         loadJSNativeLoadSpec(classInfo.classDef.jsNativeLoadSpec.get)
@@ -352,7 +352,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def loadJSConstructor(classInfo: ClassInfo)(implicit pos: Position): js.Any = {
+  def loadJSConstructor(classInfo: ClassInfo)(implicit pos: Position): Value = {
     classInfo.kind match {
       case NativeJSClass =>
         loadJSNativeLoadSpec(classInfo.classDef.jsNativeLoadSpec.get)
@@ -363,7 +363,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): js.Any = {
+  def loadJSNativeLoadSpec(loadSpec: JSNativeLoadSpec)(implicit pos: Position): Value = {
     loadSpec match {
       case JSNativeLoadSpec.Global(ref, path) =>
         path.foldLeft(getJSGlobalRef(ref)) { (prev, pathItem) =>
@@ -543,12 +543,12 @@ private[core] final class Executor(val interpreter: Interpreter) {
     }
   }
 
-  def createJSClass(classInfo: ClassInfo, captureValues: List[js.Any])(
+  def createJSClass(classInfo: ClassInfo, captureValues: List[Value])(
       implicit pos: Position): js.Dynamic = {
     classInfo.getCompiledJSClassDef().createClass(captureValues)
   }
 
-  def setFunctionName(f: js.Any, name: String): Unit = {
+  def setFunctionName(f: Value, name: String): Unit = {
     js.Object.defineProperty(f.asInstanceOf[js.Object], "name",
         Descriptor.make(configurable = true, false, false, name))
   }
@@ -591,23 +591,23 @@ private[core] object Executor {
   }
 
   trait JSVarArgsFunction extends js.Function {
-    def apply(args: js.Any*): js.Any
+    def apply(args: Value*): Value
   }
 
   trait JSVarArgsThisFunction extends js.ThisFunction {
-    def apply(thiz: js.Any, args: js.Any*): js.Any
+    def apply(thiz: Value, args: Value*): Value
   }
 
   trait TypedClosure {
-    def apply(args: List[js.Any]): js.Any
+    def apply(args: List[Value]): Value
   }
 
-  def getJSGlobalRef(name: String): js.Any =
-    js.eval(name).asInstanceOf[js.Any]
+  def getJSGlobalRef(name: String): Value =
+    js.eval(name)
 
-  def setJSGlobalRef(name: String, value: js.Any): Unit = {
+  def setJSGlobalRef(name: String, value: Value): Unit = {
     val argName = if (name == "value") "x" else "value"
-    val fun = new js.Function(argName, s"""$name = $argName;""").asInstanceOf[js.Function1[js.Any, Unit]]
+    val fun = new js.Function(argName, s"""$name = $argName;""").asInstanceOf[js.Function1[Value, Unit]]
     fun(value)
   }
 }

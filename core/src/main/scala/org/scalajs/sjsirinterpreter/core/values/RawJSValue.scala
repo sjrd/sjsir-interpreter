@@ -5,11 +5,11 @@ import scala.scalajs.js
 @js.native
 private[core] trait RawJSValue extends js.Any {
   @js.annotation.JSBracketCall
-  def jsMethodApply(method: js.Any)(args: js.Any*): js.Any
+  def jsMethodApply(method: Value)(args: Value*): Value
 
   @js.annotation.JSBracketAccess
-  def jsPropertyGet(index: js.Any): js.Any
+  def jsPropertyGet(index: Value): Value
 
   @js.annotation.JSBracketAccess
-  def jsPropertySet(index: js.Any, value: js.Any): Unit
+  def jsPropertySet(index: Value, value: Value): Unit
 }
