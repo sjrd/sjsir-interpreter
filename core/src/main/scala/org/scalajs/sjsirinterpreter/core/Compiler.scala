@@ -12,8 +12,7 @@ import org.scalajs.ir.ScalaJSVersions
 import org.scalajs.ir.Trees._
 
 import org.scalajs.sjsirinterpreter.core.{Nodes => n}
-import org.scalajs.sjsirinterpreter.core.values.CharInstance
-import org.scalajs.sjsirinterpreter.core.values.LongInstance
+import org.scalajs.sjsirinterpreter.core.Types.toAny
 
 private[core] final class Compiler(interpreter: Interpreter) {
   import Compiler._
@@ -268,7 +267,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Literal(value)
 
       case CharLiteral(value) =>
-        new n.Literal(new CharInstance(value))
+        new n.Literal(toAny(value))
 
       case ByteLiteral(value) =>
         new n.Literal(value)
@@ -280,7 +279,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
         new n.Literal(value)
 
       case LongLiteral(value) =>
-        new n.Literal(new LongInstance(value))
+        new n.Literal(toAny(value))
 
       case FloatLiteral(value) =>
         new n.Literal(value)

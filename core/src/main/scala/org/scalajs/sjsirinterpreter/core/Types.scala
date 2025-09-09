@@ -10,8 +10,8 @@ private[core] object Types {
 
   def zeroOf(tpe: Type): js.Any = tpe match {
     case BooleanType => false
-    case CharType    => new CharInstance('\u0000')
-    case LongType    => new LongInstance(0L)
+    case CharType    => '\u0000'.asInstanceOf[js.Any]
+    case LongType    => 0L.asInstanceOf[js.Any]
     case ByteType | ShortType | IntType => 0
     case FloatType   => 0.0f
     case DoubleType  => 0.0
@@ -22,11 +22,11 @@ private[core] object Types {
 
   def zeroOfRef(ref: NonArrayTypeRef): js.Any = ref match {
     case BooleanRef => false
-    case CharRef    => new CharInstance('\u0000')
+    case CharRef    => '\u0000'.asInstanceOf[js.Any]
     case ByteRef    => 0
     case ShortRef   => 0
     case IntRef     => 0
-    case LongRef    => new LongInstance(0L)
+    case LongRef    => 0L.asInstanceOf[js.Any]
     case FloatRef   => 0.0f
     case DoubleRef  => 0.0
     case _          => null
@@ -52,13 +52,13 @@ private[core] object Types {
     case _ => throw new Error("Interpreter Error: Not an Int")
   }
 
-  def asLong(value: Any): LongInstance = value match {
-    case long: LongInstance => long
+  def asLong(value: Any): Long = value match {
+    case long: Long => long
     case _ => throw new Error(s"Interpreter Error: Not a Long")
   }
 
-  def asChar(value: Any): CharInstance = value match {
-    case char: CharInstance => char
+  def asChar(value: Any): Char = value match {
+    case char: Char => char
     case _ => throw new Error(s"Interpreter Error: Not a Char")
   }
 
@@ -71,4 +71,8 @@ private[core] object Types {
     case double: Double => double
     case _ => throw new Error("Interpreter Error: Not a Double")
   }
+
+  def toAny(value: Char): js.Any = value.asInstanceOf[js.Any]
+
+  def toAny(value: Long): js.Any = value.asInstanceOf[js.Any]
 }

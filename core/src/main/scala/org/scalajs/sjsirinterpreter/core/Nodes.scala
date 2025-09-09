@@ -19,6 +19,7 @@ import org.scalajs.ir.Types._
 import org.scalajs.ir.WellKnownNames._
 
 import org.scalajs.sjsirinterpreter.core.values._
+import org.scalajs.sjsirinterpreter.core.Types.toAny
 
 import Executor._
 
@@ -428,8 +429,8 @@ private[core] object Nodes {
           case _: String          => executor.boxedStringClassInfo
           case _: Double          => executor.boxedDoubleClassInfo // All `number`s use jl.Double, by spec
           case _: Boolean         => executor.boxedBooleanClassInfo
-          case _: LongInstance    => executor.boxedLongClassInfo
-          case _: CharInstance    => executor.boxedCharacterClassInfo
+          case _: Long            => executor.boxedLongClassInfo
+          case _: Char            => executor.boxedCharacterClassInfo
           case ()                 => executor.boxedUnitClassInfo
           case _                  => executor.objectClassInfo
         }
@@ -498,9 +499,9 @@ private[core] object Nodes {
       val value = lhs.eval()
 
       @inline def booleanValue: Boolean = value.asInstanceOf[Boolean]
-      @inline def charValue: Char = value.asInstanceOf[CharInstance].value
+      @inline def charValue: Char = value.asInstanceOf[Char]
       @inline def intValue: Int = value.asInstanceOf[Int]
-      @inline def longValue: Long = value.asInstanceOf[LongInstance].value
+      @inline def longValue: Long = value.asInstanceOf[Long]
       @inline def floatValue: Float = value.asInstanceOf[Float]
       @inline def doubleValue: Double = value.asInstanceOf[Double]
       @inline def stringValue: String = value.asInstanceOf[String]
@@ -509,15 +510,15 @@ private[core] object Nodes {
       (op: @switch) match {
         case Boolean_!     => !booleanValue
         case CharToInt     => charValue.toInt
-        case IntToLong     => new LongInstance(intValue.toLong)
-        case IntToChar     => new CharInstance(intValue.toChar)
+        case IntToLong     => toAny(intValue.toLong)
+        case IntToChar     => toAny(intValue.toChar)
         case IntToByte     => intValue.toByte
         case IntToShort    => intValue.toShort
         case LongToInt     => longValue.toInt
         case DoubleToInt   => doubleValue.toInt
         case DoubleToFloat => doubleValue.toFloat
         case LongToDouble  => longValue.toDouble
-        case DoubleToLong  => new LongInstance(doubleValue.toLong)
+        case DoubleToLong  => toAny(doubleValue.toLong)
         case LongToFloat   => longValue.toFloat
         case String_length => stringValue.length
 
@@ -579,8 +580,8 @@ private[core] object Nodes {
           (value: Any) match {
             case Instance(instance)   => getClassOf(instance.classInfo.typeRef)
             case array: ArrayInstance => getClassOf(array.typeRef)
-            case _: LongInstance      => getClassOf(executor.boxedLongClassInfo.typeRef)
-            case _: CharInstance      => getClassOf(executor.boxedCharacterClassInfo.typeRef)
+            case _: Long              => getClassOf(executor.boxedLongClassInfo.typeRef)
+            case _: Char              => getClassOf(executor.boxedCharacterClassInfo.typeRef)
             case _: String            => getClassOf(executor.boxedStringClassInfo.typeRef)
             case _: Byte              => getClassOf(executor.boxedByteClassInfo.typeRef)
             case _: Short             => getClassOf(executor.boxedShortClassInfo.typeRef)
@@ -638,7 +639,7 @@ private[core] object Nodes {
         case Float_fromBits =>
           JFloat.intBitsToFloat(intValue)
         case Double_toBits =>
-          new LongInstance(JDouble.doubleToRawLongBits(doubleValue))
+          toAny(JDouble.doubleToRawLongBits(doubleValue))
         case Double_fromBits =>
           JDouble.longBitsToDouble(longValue)
         case Int_clz =>
@@ -646,7 +647,7 @@ private[core] object Nodes {
         case Long_clz =>
           JLong.numberOfLeadingZeros(longValue)
         case UnsignedIntToLong =>
-          new LongInstance(Integer.toUnsignedLong(intValue))
+          toAny(Integer.toUnsignedLong(intValue))
       }
     }
   }
@@ -664,7 +665,7 @@ private[core] object Nodes {
 
       @inline def booleanLHSValue: Boolean = lhsValue.asInstanceOf[Boolean]
       @inline def intLHSValue: Int = lhsValue.asInstanceOf[Int]
-      @inline def longLHSValue: Long = lhsValue.asInstanceOf[LongInstance].value
+      @inline def longLHSValue: Long = lhsValue.asInstanceOf[Long]
       @inline def floatLHSValue: Float = lhsValue.asInstanceOf[Float]
       @inline def doubleLHSValue: Double = lhsValue.asInstanceOf[Double]
       @inline def stringLHSValue: String = lhsValue.asInstanceOf[String]
@@ -672,7 +673,7 @@ private[core] object Nodes {
 
       @inline def booleanRHSValue: Boolean = rhsValue.asInstanceOf[Boolean]
       @inline def intRHSValue: Int = rhsValue.asInstanceOf[Int]
-      @inline def longRHSValue: Long = rhsValue.asInstanceOf[LongInstance].value
+      @inline def longRHSValue: Long = rhsValue.asInstanceOf[Long]
       @inline def floatRHSValue: Float = rhsValue.asInstanceOf[Float]
       @inline def doubleRHSValue: Double = rhsValue.asInstanceOf[Double]
       @inline def classRHSValue: TypeRef = rhsValue.asInstanceOf[Instance.ClassInstance].typeRef
@@ -720,18 +721,18 @@ private[core] object Nodes {
         case Int_>  => intLHSValue > intRHSValue
         case Int_>= => intLHSValue >= intRHSValue
 
-        case Long_+ => new LongInstance(longLHSValue + longRHSValue)
-        case Long_- => new LongInstance(longLHSValue - longRHSValue)
-        case Long_* => new LongInstance(longLHSValue * longRHSValue)
-        case Long_/ => new LongInstance(longLHSValue / checkLongDivByZero(longRHSValue))
-        case Long_% => new LongInstance(longLHSValue % checkLongDivByZero(longRHSValue))
+        case Long_+ => toAny(longLHSValue + longRHSValue)
+        case Long_- => toAny(longLHSValue - longRHSValue)
+        case Long_* => toAny(longLHSValue * longRHSValue)
+        case Long_/ => toAny(longLHSValue / checkLongDivByZero(longRHSValue))
+        case Long_% => toAny(longLHSValue % checkLongDivByZero(longRHSValue))
 
-        case Long_|   => new LongInstance(longLHSValue | longRHSValue)
-        case Long_&   => new LongInstance(longLHSValue & longRHSValue)
-        case Long_^   => new LongInstance(longLHSValue ^ longRHSValue)
-        case Long_<<  => new LongInstance(longLHSValue << intRHSValue)
-        case Long_>>> => new LongInstance(longLHSValue >>> intRHSValue)
-        case Long_>>  => new LongInstance(longLHSValue >> intRHSValue)
+        case Long_|   => toAny(longLHSValue | longRHSValue)
+        case Long_&   => toAny(longLHSValue & longRHSValue)
+        case Long_^   => toAny(longLHSValue ^ longRHSValue)
+        case Long_<<  => toAny(longLHSValue << intRHSValue)
+        case Long_>>> => toAny(longLHSValue >>> intRHSValue)
+        case Long_>>  => toAny(longLHSValue >> intRHSValue)
 
         case Long_== => longLHSValue == longRHSValue
         case Long_!= => longLHSValue != longRHSValue
@@ -759,7 +760,7 @@ private[core] object Nodes {
         case Double_>  => doubleLHSValue > doubleRHSValue
         case Double_>= => doubleLHSValue >= doubleRHSValue
 
-        case String_charAt => new CharInstance(stringLHSValue.charAt(intRHSValue))
+        case String_charAt => toAny(stringLHSValue.charAt(intRHSValue))
 
         case Class_isInstance =>
           val result: Boolean = classLHSValue match {
@@ -828,9 +829,9 @@ private[core] object Nodes {
         case Int_unsigned_% =>
           Integer.remainderUnsigned(intLHSValue, checkIntDivByZero(intRHSValue))
         case Long_unsigned_/ =>
-          new LongInstance(JLong.divideUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+          toAny(JLong.divideUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
         case Long_unsigned_% =>
-          new LongInstance(JLong.remainderUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
+          toAny(JLong.remainderUnsigned(longLHSValue, checkLongDivByZero(longRHSValue)))
 
         case Int_unsigned_<  => (intLHSValue ^ Int.MinValue) < (intRHSValue ^ Int.MinValue)
         case Int_unsigned_<= => (intLHSValue ^ Int.MinValue) <= (intRHSValue ^ Int.MinValue)
