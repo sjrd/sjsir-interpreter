@@ -1,5 +1,7 @@
 package org.scalajs.sjsirinterpreter.core
 
+import scala.annotation.switch
+
 import scala.collection.mutable
 
 import scala.scalajs.js
@@ -81,6 +83,12 @@ private[core] final class Compiler(interpreter: Interpreter) {
 
       case If(cond, thenp, elsep) =>
         new n.If(compile(cond), compile(thenp), compile(elsep))
+
+      case LinkTimeIf(cond, thenp, elsep) =>
+        if (evalLinkTimeCond(cond))
+          compile(thenp)
+        else
+          compile(elsep)
 
       case While(cond, body) =>
         new n.While(compile(cond), compile(body))
@@ -286,16 +294,8 @@ private[core] final class Compiler(interpreter: Interpreter) {
       case ClassOf(typeRef) =>
         new n.ClassOf(typeRef)
 
-      case LinkTimeProperty(name) =>
-        import LinkTimeProperty._
-        val value: js.Any = name match {
-          case ProductionMode             => false
-          case ESVersion                  => LinkingInfo.ESVersion.ES2015
-          case UseECMAScript2015Semantics => true
-          case IsWebAssembly              => false
-          case LinkerVersion              => ScalaJSVersions.current
-        }
-        new n.Literal(value)
+      case tree: LinkTimeProperty =>
+        new n.Literal(evalLinkTimeTree(tree))
 
       // Atomic expressions
 
@@ -331,6 +331,90 @@ private[core] final class Compiler(interpreter: Interpreter) {
           _:JSImportMeta | _:JSImportCall | _:ApplyDynamicImport =>
         throw new AssertionError(
             s"Unexpected tree of type ${expr.getClass().getSimpleName()}  at $pos")
+    }
+  }
+
+  private def evalLinkTimeCond(tree: Tree): Boolean = {
+    (evalLinkTimeTree(tree): Any) match {
+      case value: Boolean =>
+        value
+      case value =>
+        throw new AssertionError(
+            s"Wrong value type for the cond of a LinkTimeIf: $value at ${tree.pos}")
+    }
+  }
+
+  private def evalLinkTimeTree(tree: Tree): js.Any = {
+    tree match {
+      case BooleanLiteral(value) => value
+      case IntLiteral(value)     => value
+      case StringLiteral(value)  => value
+
+      case LinkTimeProperty(name) =>
+        import LinkTimeProperty._
+        name match {
+          case ProductionMode             => false
+          case ESVersion                  => LinkingInfo.ESVersion.ES2015
+          case UseECMAScript2015Semantics => true
+          case IsWebAssembly              => false
+          case LinkerVersion              => ScalaJSVersions.current
+        }
+
+      case UnaryOp(op, lhs) =>
+        import UnaryOp._
+
+        val value = evalLinkTimeTree(lhs)
+
+        @inline def booleanValue: Boolean = value.asInstanceOf[Boolean]
+        @inline def intValue: Int = value.asInstanceOf[Int]
+
+        op match {
+          case Boolean_! => !booleanValue
+
+          case _ =>
+            throw new AssertionError(
+                s"Illegal unary op $op in link-time tree at ${tree.pos}")
+        }
+
+      case BinaryOp(op, lhs, rhs) =>
+        import BinaryOp._
+
+        val lhsValue = evalLinkTimeTree(lhs)
+        val rhsValue = evalLinkTimeTree(rhs)
+
+        @inline def booleanLHSValue: Boolean = lhsValue.asInstanceOf[Boolean]
+        @inline def intLHSValue: Int = lhsValue.asInstanceOf[Int]
+
+        @inline def booleanRHSValue: Boolean = rhsValue.asInstanceOf[Boolean]
+        @inline def intRHSValue: Int = rhsValue.asInstanceOf[Int]
+
+        (op: @switch) match {
+          case Boolean_== => booleanLHSValue == booleanRHSValue
+          case Boolean_!= => booleanLHSValue != booleanRHSValue
+          case Boolean_|  => booleanLHSValue | booleanRHSValue
+          case Boolean_&  => booleanLHSValue & booleanRHSValue
+
+          case Int_== => intLHSValue == intRHSValue
+          case Int_!= => intLHSValue != intRHSValue
+          case Int_<  => intLHSValue < intRHSValue
+          case Int_<= => intLHSValue <= intRHSValue
+          case Int_>  => intLHSValue > intRHSValue
+          case Int_>= => intLHSValue >= intRHSValue
+
+          case _ =>
+            throw new AssertionError(
+                s"Illegal binary op $op in link-time tree at ${tree.pos}")
+        }
+
+      case LinkTimeIf(cond, thenp, elsep) =>
+        if (evalLinkTimeCond(cond))
+          evalLinkTimeTree(thenp)
+        else
+          evalLinkTimeTree(elsep)
+
+      case _ =>
+        throw new AssertionError(
+            s"Illegal link-time tree of class ${tree.getClass().getName()} at ${tree.pos}")
     }
   }
 
