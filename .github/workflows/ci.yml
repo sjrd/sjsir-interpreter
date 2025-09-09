@@ -12,14 +12,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Test Core
@@ -34,14 +34,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.compiler.*
@@ -52,14 +52,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.javalib.*
@@ -70,14 +70,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.jsinterop.*
@@ -88,14 +88,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.junit.*
@@ -106,14 +106,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.library.*
@@ -124,14 +124,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.niobuffer.*
@@ -142,14 +142,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.niocharset.*
@@ -160,14 +160,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.scalalib.*
@@ -178,14 +178,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.typedarray.*
@@ -196,14 +196,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: olafurpg/setup-scala@v14
         with:
           java-version: adopt@1.11
-      - name: Setup Node.js v14 LTS
-        uses: actions/setup-node@v2.1.2
+      - name: Setup Node.js v24
+        uses: actions/setup-node@v5.0.0
         with:
-          node-version: 14
+          node-version: 24
       - name: npm install
         run: npm install
       - name: Scala.js test suite - fullOpt
