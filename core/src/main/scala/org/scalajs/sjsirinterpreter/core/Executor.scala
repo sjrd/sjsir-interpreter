@@ -379,11 +379,11 @@ private[core] final class Executor(val interpreter: Interpreter) {
   private val isInstanceOfAlways: Any => Boolean = _ => true
   private val isInstanceOfString: Any => Boolean = _.isInstanceOf[String]
   private val isInstanceOfBoolean: Any => Boolean = _.isInstanceOf[Boolean]
-  private val isInstanceOfChar: Any => Boolean = _.isInstanceOf[CharInstance]
+  private val isInstanceOfChar: Any => Boolean = _.isInstanceOf[Char]
   private val isInstanceOfByte: Any => Boolean = _.isInstanceOf[Byte]
   private val isInstanceOfShort: Any => Boolean = _.isInstanceOf[Short]
   private val isInstanceOfInt: Any => Boolean = _.isInstanceOf[Int]
-  private val isInstanceOfLong: Any => Boolean = _.isInstanceOf[LongInstance]
+  private val isInstanceOfLong: Any => Boolean = _.isInstanceOf[Long]
   private val isInstanceOfFloat: Any => Boolean = _.isInstanceOf[Float]
   private val isInstanceOfDouble: Any => Boolean = _.isInstanceOf[Double]
   private val isInstanceOfUndef: Any => Boolean = js.isUndefined(_)
@@ -474,8 +474,8 @@ private[core] final class Executor(val interpreter: Interpreter) {
                 case _: Double        => canBeNumber
                 case _: String        => canBeString
                 case _: Boolean       => canBeBoolean
-                case _: LongInstance  => canBeNumber
-                case _: CharInstance  => canBeChar
+                case _: Long          => canBeNumber
+                case _: Char          => canBeChar
                 case _: ArrayInstance => canBeArray
                 case _                => false
               }
