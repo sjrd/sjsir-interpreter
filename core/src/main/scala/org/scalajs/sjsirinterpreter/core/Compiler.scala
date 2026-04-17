@@ -355,6 +355,7 @@ private[core] final class Compiler(interpreter: Interpreter) {
           case ProductionMode             => false
           case ESVersion                  => LinkingInfo.ESVersion.ES2015
           case UseECMAScript2015Semantics => true
+          case ModuleKind                 => LinkingInfo.ModuleKind.NoModule
           case IsWebAssembly              => false
           case LinkerVersion              => ScalaJSVersions.current
         }

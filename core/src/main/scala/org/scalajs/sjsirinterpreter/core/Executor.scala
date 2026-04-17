@@ -407,23 +407,23 @@ private[core] final class Executor(val interpreter: Interpreter) {
           case 'D' => isInstanceOfDouble
           case 'V' | 'N' | 'E' => isInstanceOfNever
         }
-      case ClassType(className, false) =>
+      case ClassType(className, false, false) =>
         val classInfo = interpreter.getClassInfo(className)
         classInfo.getIsInstanceFun(initIsInstanceFun(classInfo))
       case UndefType =>
         isInstanceOfUndef
-      case ArrayType(arrayTypeRef, false) =>
+      case ArrayType(arrayTypeRef, false, false) =>
         { value =>
           value match {
             case value: ArrayInstance =>
-              isSubtype(ArrayType(value.typeRef, nullable = false), tpe) { (lhs, rhs) =>
+              isSubtype(ArrayType(value.typeRef, nullable = false, exact = true), tpe) { (lhs, rhs) =>
                 interpreter.getClassInfo(lhs).isSubclass(rhs)
               }
             case _ =>
               false
           }
         }
-      case _:ClosureType | _:RecordType | AnyType | ClassType(_, true) | ArrayType(_, true) =>
+      case _:ClosureType | _:RecordType | AnyType | _:ClassType | _:ArrayType =>
         throw new AssertionError(s"Unexpected type for isInstanceOf: $tpe at $pos")
     }
   }

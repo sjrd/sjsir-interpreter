@@ -766,10 +766,10 @@ private[core] object Nodes {
             case _: PrimRef =>
               false
             case ClassRef(className) =>
-              val isInstanceFun = executor.getIsInstanceOfFun(ClassType(className, nullable = false))
+              val isInstanceFun = executor.getIsInstanceOfFun(ClassType(className, nullable = false, exact = false))
               isInstanceFun(rhsValue)
             case typeRef: ArrayTypeRef =>
-              val isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
+              val isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false, exact = false))
               isInstanceFun(rhsValue)
             case _: TransientTypeRef =>
               throw new AssertionError(
@@ -786,7 +786,9 @@ private[core] object Nodes {
             case (ClassRef(lhsClassName), _: ArrayTypeRef) =>
               lhsClassName == ObjectClass || lhsClassName == CloneableClass || lhsClassName == SerializableClass
             case (lhsTypeRef: ArrayTypeRef, rhsTypeRef: ArrayTypeRef) =>
-              isSubtype(ArrayType(rhsTypeRef, nullable = false), ArrayType(lhsTypeRef, nullable = false)) {
+              val lhsArrayType = ArrayType(lhsTypeRef, nullable = false, exact = false)
+              val rhsArrayType = ArrayType(rhsTypeRef, nullable = false, exact = false)
+              isSubtype(rhsArrayType, lhsArrayType) {
                 (lhs, rhs) => getClassInfo(lhs).isSubclass(rhs)
               }
             case _ =>
@@ -803,11 +805,13 @@ private[core] object Nodes {
               castFail(s"cannot cast to primitive type ${typeRef.displayName}")
             case typeRef @ ClassRef(className) =>
               val castAlwaysOK = className == ObjectClass || getClassInfo(className).kind.isJSType
-              def isInstanceFun = executor.getIsInstanceOfFun(ClassType(className, nullable = false))
+              def isInstanceFun =
+                executor.getIsInstanceOfFun(ClassType(className, nullable = false, exact = false))
               if (!(castAlwaysOK || rhsValue == null || isInstanceFun(rhsValue)))
                 castFail(s"$rhsValue is not an instance of ${executor.getClassName(typeRef)}")
             case typeRef: ArrayTypeRef =>
-              def isInstanceFun = executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false))
+              def isInstanceFun =
+                executor.getIsInstanceOfFun(ArrayType(typeRef, nullable = false, exact = false))
               if (!(rhsValue == null || isInstanceFun(rhsValue)))
                 castFail(s"$rhsValue is not an instance of ${executor.getClassName(typeRef)}")
             case _: TransientTypeRef =>

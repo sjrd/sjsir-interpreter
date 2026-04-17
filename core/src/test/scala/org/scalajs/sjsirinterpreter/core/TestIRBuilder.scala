@@ -84,7 +84,7 @@ object TestIRBuilder {
     val flags = MemberFlags.empty.withNamespace(MemberNamespace.Constructor)
     MethodDef(flags, MethodIdent(NoArgConstructorName), NON, Nil, VoidType,
         Some(ApplyStatically(EAF.withConstructor(true),
-            This()(ClassType(enclosingClassName, nullable = false)),
+            This()(ClassType(enclosingClassName, nullable = false, exact = false)),
             ObjectClass, MethodIdent(NoArgConstructorName),
             Nil)(VoidType)))(
         EOH, NOV)
@@ -100,7 +100,7 @@ object TestIRBuilder {
   val MainMethodName: MethodName = m("main", List(AT), VoidRef)
 
   def mainMethodDef(body: Tree): MethodDef = {
-    val argsParamDef = paramDef("args", ArrayType(AT, nullable = true))
+    val argsParamDef = paramDef("args", ArrayType(AT, nullable = true, exact = false))
     MethodDef(MemberFlags.empty.withNamespace(MemberNamespace.PublicStatic),
         MainMethodName, NON, List(argsParamDef), VoidType, Some(body))(
         EOH, NOV)
