@@ -647,6 +647,8 @@ private[core] object Nodes {
           JLong.numberOfLeadingZeros(longValue)
         case UnsignedIntToLong =>
           Integer.toUnsignedLong(intValue)
+        case BoolToInt =>
+          if (booleanValue) 1 else 0
       }
     }
   }
