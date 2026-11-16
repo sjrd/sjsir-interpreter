@@ -457,11 +457,13 @@ private[core] final class ClassInfo(val interpreter: Interpreter,
   }
 
   def lookupJSNativeMember(methodName: MethodName)(implicit pos: Position): JSNativeMemberDef = {
-    classDef.jsNativeMembers.find(_.name.name == methodName).getOrElse {
+    classDef.topLevelImportDefs.collectFirst {
+      case m @ JSNativeMemberDef(_, MethodIdent(`methodName`), _) => m
+    }.getOrElse {
       throw new AssertionError(s"Unknown JS native member ${methodName.nameString} in $classNameString at $pos")
     }
   }
 
-  def topLevelExportNames: List[String] =
-    classDef.topLevelExportDefs.map(_.topLevelExportName)
+  def jsTopLevelExportNames: List[String] =
+    classDef.topLevelExportDefs.filter(!_.isWasmExport).map(_.topLevelExportName)
 }

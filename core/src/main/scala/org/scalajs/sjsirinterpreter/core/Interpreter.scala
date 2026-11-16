@@ -67,8 +67,8 @@ final class Interpreter(val semantics: Semantics) {
       // Sort for determinism
       val sortedClasses = newClasses.result().sortBy(_.className)
 
-      val topLevelExportNames = sortedClasses.flatMap(_.topLevelExportNames)
-      createTopLevelExportDefinitions(topLevelExportNames)
+      val jsTopLevelExportNames = sortedClasses.flatMap(_.jsTopLevelExportNames)
+      createTopLevelExportDefinitions(jsTopLevelExportNames)
 
       executor.runStaticInitializers(sortedClasses)
       executor.initializeTopLevelExports(sortedClasses)

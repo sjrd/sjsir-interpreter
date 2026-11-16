@@ -649,6 +649,20 @@ private[core] object Nodes {
           Integer.toUnsignedLong(intValue)
         case BoolToInt =>
           if (booleanValue) 1 else 0
+
+        case Float_abs =>
+          Math.abs(floatValue)
+        case Double_abs =>
+          Math.abs(doubleValue)
+        case Double_floor =>
+          Math.floor(doubleValue)
+        case Double_ceil =>
+          Math.ceil(doubleValue)
+        case Double_sqrt =>
+          Math.sqrt(doubleValue)
+
+        case ToString =>
+          "" + value
       }
     }
   }
@@ -677,6 +691,7 @@ private[core] object Nodes {
       @inline def longRHSValue: Long = rhsValue.asInstanceOf[Long]
       @inline def floatRHSValue: Float = rhsValue.asInstanceOf[Float]
       @inline def doubleRHSValue: Double = rhsValue.asInstanceOf[Double]
+      @inline def stringRHSValue: String = rhsValue.asInstanceOf[String]
       @inline def classRHSValue: TypeRef = rhsValue.asInstanceOf[Instance.ClassInstance].typeRef
 
       def checkIntDivByZero(x: Int): Int = {
@@ -695,7 +710,7 @@ private[core] object Nodes {
         case === => lhsValue.asInstanceOf[AnyRef] eq rhsValue.asInstanceOf[AnyRef]
         case !== => lhsValue.asInstanceOf[AnyRef] ne rhsValue.asInstanceOf[AnyRef]
 
-        case String_+ => "" + lhsValue + rhsValue
+        case String_+ => stringLHSValue + stringRHSValue
 
         case Boolean_== => booleanLHSValue == booleanRHSValue
         case Boolean_!= => booleanLHSValue != booleanRHSValue
@@ -847,6 +862,11 @@ private[core] object Nodes {
         case Long_unsigned_<= => (longLHSValue ^ Long.MinValue) <= (longRHSValue ^ Long.MinValue)
         case Long_unsigned_>  => (longLHSValue ^ Long.MinValue) > (longRHSValue ^ Long.MinValue)
         case Long_unsigned_>= => (longLHSValue ^ Long.MinValue) >= (longRHSValue ^ Long.MinValue)
+
+        case Float_min => Math.min(floatLHSValue, floatRHSValue)
+        case Float_max => Math.max(floatLHSValue, floatRHSValue)
+        case Double_min => Math.min(doubleLHSValue, doubleRHSValue)
+        case Double_max => Math.max(doubleLHSValue, doubleRHSValue)
       }
     }
   }

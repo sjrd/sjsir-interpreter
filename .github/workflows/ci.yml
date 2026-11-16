@@ -13,13 +13,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Test Core
@@ -35,13 +37,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.compiler.*
@@ -53,13 +57,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.javalib.*
@@ -71,13 +77,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.jsinterop.*
@@ -89,13 +97,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.junit.*
@@ -107,13 +117,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.library.*
@@ -125,13 +137,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.niobuffer.*
@@ -143,13 +157,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.niocharset.*
@@ -161,13 +177,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.scalalib.*
@@ -179,13 +197,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - org.scalajs.testsuite.typedarray.*
@@ -197,13 +217,15 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v5
-      - uses: olafurpg/setup-scala@v14
+      - name: Set up JDK 17
+        uses: coursier/setup-action@v1
         with:
-          java-version: adopt@1.11
-      - name: Setup Node.js v24
+          jvm: temurin:1.17
+          apps: sbt
+      - name: Setup Node.js v26
         uses: actions/setup-node@v5.0.0
         with:
-          node-version: 24
+          node-version: 26
       - name: npm install
         run: npm install
       - name: Scala.js test suite - fullOpt

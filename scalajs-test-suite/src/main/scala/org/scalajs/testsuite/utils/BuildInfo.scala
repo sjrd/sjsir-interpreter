@@ -6,6 +6,7 @@ private[utils] object BuildInfo {
   final val isNoModule = true
   final val isESModule = false
   final val isCommonJSModule = false
+  final val isWasmModule = false
   final val usesClosureCompiler = false
   final val hasMinifiedNames = false
   final val compliantAsInstanceOfs = false
@@ -20,4 +21,5 @@ private[utils] object BuildInfo {
   final val esVersion = 6
   final val useECMAScript2015Semantics = true
   final val isWebAssembly = false
+  final val hasWasmCustomDescriptors = false
 }
