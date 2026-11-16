@@ -36,7 +36,7 @@ lazy val `sjsir-interpreter` = project
   .settings(
     scalacOptions ++= Seq("-Ypatmat-exhaust-depth", "40"),
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-linker" % "1.22.0",
+      "org.scala-js" %%% "scalajs-linker" % "1.23.0",
       "org.scalameta" %%% "munit" % "1.3.0" % Test,
     ),
     scalaJSLinkerConfig ~= {
@@ -195,6 +195,7 @@ lazy val `scalajs-test-suite` = project
       val base = (fetchScalaJSSource / artifactPath).value
       Seq(
         base / "test-suite/shared/src/test/scala",
+        base / "test-suite/js-wasm/src/test",
         base / "test-suite/js/src/test/require-2.12",
         // base / "test-suite/js/src/test/require-async-await", // TODO
         base / "test-suite/js/src/test/require-exponent-op",

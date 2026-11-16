@@ -154,6 +154,7 @@ private[core] final class Executor(val interpreter: Interpreter) {
     for {
       classInfo <- classInfos
       topLevelExport <- classInfo.classDef.topLevelExportDefs
+      if !topLevelExport.isWasmExport
     } {
       val className = classInfo.className
 
@@ -172,6 +173,8 @@ private[core] final class Executor(val interpreter: Interpreter) {
           case TopLevelFieldExportDef(_, _, FieldIdent(fieldName)) =>
             classInfo.registerStaticFieldMirror(fieldName, exportName)
             classInfo.getStaticField(fieldName)
+          case _: TopLevelWasmMethodExportDef =>
+            throw new AssertionError(s"unreachable: $topLevelExport")
         }
         setJSGlobalRef(exportName, value)
       }

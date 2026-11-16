@@ -327,9 +327,9 @@ private[core] final class Compiler(interpreter: Interpreter) {
       // Unexpected trees
 
       case _:RecordValue | _:RecordSelect | _:Transient | _:JSSuperConstructorCall |
-          _:JSImportMeta | _:JSImportCall | _:ApplyDynamicImport =>
+          _:JSImportMeta | _:JSImportCall | _:ApplyWasmImport | _:ApplyDynamicImport =>
         throw new AssertionError(
-            s"Unexpected tree of type ${expr.getClass().getSimpleName()}  at $pos")
+            s"Unexpected tree of type ${expr.getClass().getSimpleName()} at $pos")
     }
   }
 
